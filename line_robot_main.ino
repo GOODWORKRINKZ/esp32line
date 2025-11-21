@@ -97,6 +97,7 @@ int turnSpeed = 100;        // Скорость при поиске линии
 #ifdef USE_ENCODERS
 volatile long leftEncoderTicks = 0;
 volatile long rightEncoderTicks = 0;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;  // Мьютекс для критической секции
 unsigned long lastEncoderTime = 0;
 float leftSpeed = 0.0;    // Текущая скорость левого колеса (мм/сек)
 float rightSpeed = 0.0;   // Текущая скорость правого колеса (мм/сек)
@@ -187,8 +188,9 @@ void setup() {
   // Настройка энкодеров
   pinMode(ENCODER_LEFT, INPUT);
   pinMode(ENCODER_RIGHT, INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_LEFT), leftEncoderISR, RISING);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_RIGHT), rightEncoderISR, RISING);
+  // ESP32 поддерживает прерывания на всех GPIO, используем пин напрямую
+  attachInterrupt(ENCODER_LEFT, leftEncoderISR, RISING);
+  attachInterrupt(ENCODER_RIGHT, rightEncoderISR, RISING);
   Serial.println("[OK] Энкодеры инициализированы (режим с энкодерами)");
   #else
   Serial.println("[INFO] Режим БЕЗ энкодеров");
@@ -498,17 +500,23 @@ void updateEncoderSpeeds() {
   if (currentTime - lastUpdateTime >= 100) {  // Обновление каждые 100мс
     unsigned long deltaTime = currentTime - lastUpdateTime;
     
+    // Безопасное чтение volatile переменных в критической секции
+    portENTER_CRITICAL(&timerMux);
+    long leftTicks = leftEncoderTicks;
+    long rightTicks = rightEncoderTicks;
+    // Сбрасываем счетчики атомарно
+    leftEncoderTicks = 0;
+    rightEncoderTicks = 0;
+    portEXIT_CRITICAL(&timerMux);
+    
     // Вычисляем пройденное расстояние
-    float leftDistance = leftEncoderTicks * MM_PER_TICK;
-    float rightDistance = rightEncoderTicks * MM_PER_TICK;
+    float leftDistance = leftTicks * MM_PER_TICK;
+    float rightDistance = rightTicks * MM_PER_TICK;
     
     // Вычисляем скорости (мм/сек)
     leftSpeed = (leftDistance / deltaTime) * 1000.0;
     rightSpeed = (rightDistance / deltaTime) * 1000.0;
     
-    // Сбрасываем счетчики
-    leftEncoderTicks = 0;
-    rightEncoderTicks = 0;
     lastUpdateTime = currentTime;
     
     #ifdef DEBUG_MODE
