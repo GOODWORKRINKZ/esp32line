@@ -1,11 +1,8 @@
 #include "LineFollower.h"
 
-// Единый конструктор
+// Конструктор
 LineFollower::LineFollower(LineSensors& s, Motors& m, PIDController& p, Encoders* e)
-    : sensors(s), motors(m), pid(p),
-#ifdef USE_ENCODERS
-      encoders(e),
-#endif
+    : sensors(s), motors(m), pid(p), encoders(e),
       currentState(IDLE), baseSpeed(BASE_SPEED), searchStartTime(0) {
 }
 
@@ -13,11 +10,9 @@ void LineFollower::begin() {
     sensors.begin();
     motors.begin();
     
-#ifdef USE_ENCODERS
     if (encoders) {
         encoders->begin();
     }
-#endif
     
     currentState = IDLE;
     Serial.println("[OK] LineFollower инициализирован");
@@ -25,11 +20,9 @@ void LineFollower::begin() {
 
 void LineFollower::update() {
     // Обновление энкодеров
-#ifdef USE_ENCODERS
     if (encoders) {
         encoders->update();
     }
-#endif
     
     // Обработка текущего состояния
     switch (currentState) {
