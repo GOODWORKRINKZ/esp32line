@@ -42,9 +42,9 @@ PIDController pid;
 
 #ifdef USE_ENCODERS
 Encoders encoders;
-LineFollower robot(sensors, motors, pid, encoders);
+LineFollower robot(sensors, motors, pid, &encoders);
 #else
-LineFollower robot(sensors, motors, pid);
+LineFollower robot(sensors, motors, pid, nullptr);
 #endif
 
 // ═══════════════════════════════════════════════════════════════════════════

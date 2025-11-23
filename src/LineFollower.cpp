@@ -1,23 +1,22 @@
 #include "LineFollower.h"
 
+// Единый конструктор
+LineFollower::LineFollower(LineSensors& s, Motors& m, PIDController& p, Encoders* e)
+    : sensors(s), motors(m), pid(p),
 #ifdef USE_ENCODERS
-LineFollower::LineFollower(LineSensors& s, Motors& m, PIDController& p, Encoders& e)
-    : sensors(s), motors(m), pid(p), encoders(e), 
-      currentState(IDLE), baseSpeed(BASE_SPEED), searchStartTime(0) {
-}
-#else
-LineFollower::LineFollower(LineSensors& s, Motors& m, PIDController& p)
-    : sensors(s), motors(m), pid(p), 
-      currentState(IDLE), baseSpeed(BASE_SPEED), searchStartTime(0) {
-}
+      encoders(e),
 #endif
+      currentState(IDLE), baseSpeed(BASE_SPEED), searchStartTime(0) {
+}
 
 void LineFollower::begin() {
     sensors.begin();
     motors.begin();
     
 #ifdef USE_ENCODERS
-    encoders.begin();
+    if (encoders) {
+        encoders->begin();
+    }
 #endif
     
     currentState = IDLE;
@@ -27,7 +26,9 @@ void LineFollower::begin() {
 void LineFollower::update() {
     // Обновление энкодеров
 #ifdef USE_ENCODERS
-    encoders.update();
+    if (encoders) {
+        encoders->update();
+    }
 #endif
     
     // Обработка текущего состояния

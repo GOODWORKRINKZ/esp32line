@@ -27,7 +27,7 @@ private:
     PIDController& pid;
     
 #ifdef USE_ENCODERS
-    Encoders& encoders;
+    Encoders* encoders;  // Указатель вместо ссылки
 #endif
     
     RobotState currentState;
@@ -35,11 +35,8 @@ private:
     unsigned long searchStartTime;
     
 public:
-#ifdef USE_ENCODERS
-    LineFollower(LineSensors& s, Motors& m, PIDController& p, Encoders& e);
-#else
-    LineFollower(LineSensors& s, Motors& m, PIDController& p);
-#endif
+    // Единый конструктор с опциональным параметром энкодеров
+    LineFollower(LineSensors& s, Motors& m, PIDController& p, Encoders* e = nullptr);
     
     // Инициализация
     void begin();
