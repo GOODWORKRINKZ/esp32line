@@ -106,8 +106,12 @@ void LineFollower::startTurn(TurnDirection dir, float degrees) {
     turnDirection = dir;
     targetTurnDegrees = degrees;
     
+    // ВАЖНО: Сначала ОСТАНАВЛИВАЕМ моторы чтобы сбросить инерцию!
+    motors.stop();
+    delay(20);  // Даём время остановиться
+    
     if (encoders) {
-        // Сбрасываем и запоминаем начальные тики
+        // Сбрасываем тики ПОСЛЕ остановки
         encoders->resetTicks();
         turnStartTicksLeft = 0;
         turnStartTicksRight = 0;
@@ -115,10 +119,21 @@ void LineFollower::startTurn(TurnDirection dir, float degrees) {
     
     currentState = TURNING;
     
+    // СРАЗУ даём команду на поворот (не ждём executeTurn!)
+    int leftCmd, rightCmd;
+    if (dir == TURN_RIGHT) {
+        leftCmd = TURN_SPEED;
+        rightCmd = -TURN_SPEED;
+    } else {
+        leftCmd = -TURN_SPEED;
+        rightCmd = TURN_SPEED;
+    }
+    motors.setSpeed(leftCmd, rightCmd);
+    
 #ifdef DEBUG_MODE
     const char* dirStr = (dir == TURN_LEFT) ? "ВЛЕВО" : "ВПРАВО";
-    Serial.printf("[%lu] 🔄 ПОВОРОТ %s на %.1f° (цель: %.1f тиков)\n", 
-                  millis(), dirStr, degrees, degrees * TICKS_PER_DEGREE);
+    Serial.printf("[%lu] 🔄 ПОВОРОТ %s на %.1f° (цель: %.1f тиков) | M: L=%d R=%d\n", 
+                  millis(), dirStr, degrees, degrees * TICKS_PER_DEGREE, leftCmd, rightCmd);
 #endif
 }
 
@@ -193,14 +208,13 @@ void LineFollower::executeTurn() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// СЛЕДОВАНИЕ ПО ЛИНИИ
+// СЛЕДОВАНИЕ ПО ЛИНИИ (как у профессиональных LFR - без поворота на месте!)
 // ═══════════════════════════════════════════════════════════════════════════
 void LineFollower::followLine() {
     int sensorValues[5];
     sensors.read(sensorValues);
     
     float position = sensors.calculatePosition(sensorValues);
-    bool usingMemory = false;  // Флаг: используем память позиции
     
     // Проверка: линия найдена?
     if (position == -999) {
@@ -210,12 +224,36 @@ void LineFollower::followLine() {
         
         // Проверяем что есть валидная сохранённая позиция и она не устарела
         if (lastPosition != -999 && timeSinceLine < LINE_MEMORY_TIMEOUT) {
-            // Используем последнюю известную позицию
-            // ВАЖНО: при использовании памяти НЕ делаем резких поворотов!
-            position = lastPosition;
-            usingMemory = true;
+            // ═══════════════════════════════════════════════════════════════
+            // ЛИНИЯ ПОТЕРЯНА НО НЕДАВНО БЫЛА ВИДНА
+            // Как у Aarushraj: один мотор назад, другой вперёд в направлении
+            // последней известной позиции
+            // ═══════════════════════════════════════════════════════════════
+            int leftSpeed, rightSpeed;
+            
+            if (lastPosition > 0) {
+                // Линия была справа - крутим вправо
+                leftSpeed = baseSpeed;
+                rightSpeed = -MIN_SPEED;  // Правый назад
+            } else {
+                // Линия была слева - крутим влево
+                leftSpeed = -MIN_SPEED;   // Левый назад
+                rightSpeed = baseSpeed;
+            }
+            
+            motors.setSpeed(leftSpeed, rightSpeed);
+            
+#ifdef DEBUG_MODE
+            static unsigned long lastLostDebug = 0;
+            if (millis() - lastLostDebug > 200) {
+                Serial.printf("[%lu] 🔍 ПОИСК (память: %.1f, %lu мс) | M: L=%d R=%d\n",
+                              millis(), lastPosition, timeSinceLine, leftSpeed, rightSpeed);
+                lastLostDebug = millis();
+            }
+#endif
+            return;
         } else {
-            // Линия действительно потеряна - начинаем поиск
+            // Линия давно потеряна - начинаем полноценный поиск
             Serial.printf("[%lu] ⚠ ЛИНИЯ ПОТЕРЯНА! → ПОИСК\n", millis());
             currentState = SEARCHING_LEFT;
             searchStartTime = millis();
@@ -223,89 +261,50 @@ void LineFollower::followLine() {
         }
     }
     
-    // Вычисляем ошибку (отклонение от центра)
+    // ═══════════════════════════════════════════════════════════════════════
+    // ЛИНИЯ ВИДНА - ЧИСТЫЙ PID БЕЗ ПОВОРОТА НА МЕСТЕ!
+    // (как у amjed-ali-k и Aarushraj-Puduchery)
+    // ═══════════════════════════════════════════════════════════════════════
+    
     float error = position;
-    
-    // ═══════════════════════════════════════════════════════════════════════
-    // ДИФФЕРЕНЦИАЛЬНОЕ УПРАВЛЕНИЕ С ПОВОРОТОМ НА МЕСТЕ
-    // Используем экспоненциальные веса датчиков: позиция от -3 до +3
-    // ═══════════════════════════════════════════════════════════════════════
-    
-    int leftSpeed, rightSpeed;
     float absError = abs(error);
     
-    // Пороги для разных режимов управления (с учётом новых весов датчиков)
-    // Позиция ±3.0 = только ОДИН крайний датчик видит линию (резкий поворот 90°)
-    // Позиция ±1.5 = два датчика на краю (средний поворот)
-    // Позиция ±1.0 = боковой датчик (плавный поворот)
-    // Позиция <1.0 = центр или рядом
-    const float TURN_IN_PLACE_THRESHOLD = 2.5;  // Поворот на месте (крайние датчики)
-    const float AGGRESSIVE_THRESHOLD = 1.5;      // Агрессивная коррекция
+    // Пороги для PID режимов (с учётом весов датчиков -3..+3)
+    const float AGGRESSIVE_THRESHOLD = 1.5;  // Агрессивный PID
     
     // Определяем режим
     const char* mode;
+    int leftSpeed, rightSpeed;
     
-    // Вычисляем PID коррекцию с учётом агрессивного режима
+    // Вычисляем PID коррекцию
     float correction;
     if (absError >= AGGRESSIVE_THRESHOLD) {
-        // Агрессивный PID: увеличенные Kp и Kd для резких поворотов
-        correction = AGGRESSIVE_KP * error + AGGRESSIVE_KD * (error - pid.getPreviousError());
-    } else {
-        // Обычный PID
-        correction = pid.calculate(error);
-    }
-    
-    // ВАЖНО: НЕ поворачиваем на месте если используем память позиции!
-    // Память = линия между датчиками, нужна только плавная коррекция
-    if (absError >= TURN_IN_PLACE_THRESHOLD && !usingMemory) {
         // ═══════════════════════════════════════════════════════════════════
-        // РЕЖИМ: ПОВОРОТ НА МЕСТЕ
-        // Только крайний датчик видит линию - реальный резкий поворот!
-        // ═══════════════════════════════════════════════════════════════════
-        mode = "ПОВОРОТ";
-        
-        if (encoders) {
-            // С энкодерами - используем контролируемый поворот
-            // Оцениваем угол по формуле из Config.h
-            float estimatedAngle = (absError - MIN_TURN_ERROR) * DEGREES_PER_ERROR + BASE_TURN_ANGLE;
-            TurnDirection dir = (error > 0) ? TURN_RIGHT : TURN_LEFT;
-            startTurn(dir, estimatedAngle);
-            return;
-        } else {
-            // Без энкодеров - простой поворот на месте
-            if (error > 0) {
-                leftSpeed = TURN_SPEED;
-                rightSpeed = -TURN_SPEED;
-            } else {
-                leftSpeed = -TURN_SPEED;
-                rightSpeed = TURN_SPEED;
-            }
-        }
-    } else if (absError >= AGGRESSIVE_THRESHOLD) {
-        // ═══════════════════════════════════════════════════════════════════
-        // РЕЖИМ: АГРЕССИВНАЯ КОРРЕКЦИЯ
-        // Линия немного сбоку - одно колесо почти стоит, другое едет
+        // АГРЕССИВНЫЙ PID (как у amjed-ali-k при error > 200)
+        // Увеличенные коэффициенты для резких поворотов
         // ═══════════════════════════════════════════════════════════════════
         mode = "АГРЕСС";
+        correction = AGGRESSIVE_KP * error + AGGRESSIVE_KD * (error - pid.getPreviousError());
         
-        if (error > 0) {
-            leftSpeed = baseSpeed;
-            rightSpeed = MIN_SPEED;
-        } else {
-            leftSpeed = MIN_SPEED;
-            rightSpeed = baseSpeed;
-        }
+        // Применяем коррекцию с возможностью отрицательной скорости
+        leftSpeed = baseSpeed + correction;
+        rightSpeed = baseSpeed - correction;
+        
+        // Ограничиваем: минимум может быть отрицательным для резкого поворота
+        leftSpeed = constrain(leftSpeed, -MAX_SPEED, MAX_SPEED);
+        rightSpeed = constrain(rightSpeed, -MAX_SPEED, MAX_SPEED);
+        
     } else {
         // ═══════════════════════════════════════════════════════════════════
-        // РЕЖИМ: ПЛАВНАЯ КОРРЕКЦИЯ
-        // Линия почти по центру - едем прямо с небольшой коррекцией
+        // ПЛАВНЫЙ PID - стандартная коррекция
         // ═══════════════════════════════════════════════════════════════════
         mode = "ПЛАВНО";
+        correction = pid.calculate(error);
         
         leftSpeed = baseSpeed + correction;
         rightSpeed = baseSpeed - correction;
         
-        // Ограничиваем скорости
+        // Ограничиваем скорости (минимум всегда положительный)
         leftSpeed = constrain(leftSpeed, MIN_SPEED, MAX_SPEED);
         rightSpeed = constrain(rightSpeed, MIN_SPEED, MAX_SPEED);
     }
@@ -332,12 +331,6 @@ void LineFollower::followLine() {
         if (encoders) {
             Serial.printf(" | Энк: L=%4.0f R=%4.0f мм/с", 
                           encoders->getLeftSpeed(), encoders->getRightSpeed());
-        }
-        
-        // Флаг использования памяти
-        if (usingMemory) {
-            unsigned long timeSinceLine = now - sensors.getLastPositionTime();
-            Serial.printf(" [МЕМ:%lu мс]", timeSinceLine);
         }
         
         Serial.println();
