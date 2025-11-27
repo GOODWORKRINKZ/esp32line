@@ -6,6 +6,9 @@
 #include "Encoders.h"
 #include "LineFollower.h"
 
+// Forward declarations
+void printHelp();
+
 /*
  * ═══════════════════════════════════════════════════════════════════════════
  * РОБОТ СЛЕДУЮЩИЙ ПО ЛИНИИ - ESP32 + 5 ДАТЧИКОВ TCRT5000 + L298N + ЭНКОДЕРЫ

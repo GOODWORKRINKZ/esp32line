@@ -1,7 +1,5 @@
 #include "Encoders.h"
 
-#ifdef USE_ENCODERS
-
 // Инициализация статических переменных
 volatile long Encoders::leftTicks = 0;
 volatile long Encoders::rightTicks = 0;
@@ -11,12 +9,14 @@ Encoders::Encoders() : lastUpdateTime(0), leftSpeed(0.0), rightSpeed(0.0) {
 }
 
 void Encoders::begin() {
+#ifdef USE_ENCODERS
     pinMode(ENCODER_LEFT, INPUT);
     pinMode(ENCODER_RIGHT, INPUT);
     
     // ESP32 поддерживает прерывания на всех GPIO
     attachInterrupt(ENCODER_LEFT, leftISR, RISING);
     attachInterrupt(ENCODER_RIGHT, rightISR, RISING);
+#endif
 }
 
 void Encoders::update() {
@@ -44,6 +44,14 @@ void Encoders::update() {
         
         lastUpdateTime = currentTime;
     }
+}
+
+float Encoders::getLeftSpeed() const {
+    return leftSpeed;
+}
+
+float Encoders::getRightSpeed() const {
+    return rightSpeed;
 }
 
 long Encoders::getLeftTicks() {
@@ -74,5 +82,3 @@ void IRAM_ATTR Encoders::leftISR() {
 void IRAM_ATTR Encoders::rightISR() {
     rightTicks++;
 }
-
-#endif // USE_ENCODERS

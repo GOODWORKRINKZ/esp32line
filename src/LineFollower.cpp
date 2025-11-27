@@ -1,4 +1,5 @@
 #include "LineFollower.h"
+#include "Encoders.h"
 
 // Конструктор
 LineFollower::LineFollower(LineSensors& s, Motors& m, PIDController& p, Encoders* e)

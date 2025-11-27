@@ -6,7 +6,9 @@
 #include "Sensors.h"
 #include "Motors.h"
 #include "PIDController.h"
-#include "Encoders.h"
+
+// Forward declaration
+class Encoders;
 
 // Состояния робота
 enum RobotState {

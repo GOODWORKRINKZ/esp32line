@@ -4,8 +4,6 @@
 #include <Arduino.h>
 #include "Config.h"
 
-#ifdef USE_ENCODERS
-
 // Класс для работы с энкодерами
 class Encoders {
 private:
@@ -31,8 +29,8 @@ public:
     void update();
     
     // Получить скорости
-    float getLeftSpeed() const { return leftSpeed; }
-    float getRightSpeed() const { return rightSpeed; }
+    float getLeftSpeed() const;
+    float getRightSpeed() const;
     
     // Получить количество тиков
     long getLeftTicks();
@@ -41,7 +39,5 @@ public:
     // Сбросить счетчики
     void resetTicks();
 };
-
-#endif // USE_ENCODERS
 
 #endif // ENCODERS_H
