@@ -23,10 +23,11 @@
 #define SENSOR_5  27  // Крайний правый
 
 // Управление моторами L298N (без PWM на ENA/ENB, управление через INx)
-#define MOTOR_LEFT_FWD   12  // IN1 - левый мотор вперед
-#define MOTOR_LEFT_BWD   13  // IN2 - левый мотор назад
-#define MOTOR_RIGHT_FWD  14  // IN3 - правый мотор вперед
-#define MOTOR_RIGHT_BWD  15  // IN4 - правый мотор назад
+// ВНИМАНИЕ: Если робот поворачивает не в ту сторону, поменяйте LEFT и RIGHT местами!
+#define MOTOR_LEFT_FWD   14  // IN3 - левый мотор вперед (было 12)
+#define MOTOR_LEFT_BWD   15  // IN4 - левый мотор назад (было 13)
+#define MOTOR_RIGHT_FWD  12  // IN1 - правый мотор вперед (было 14)
+#define MOTOR_RIGHT_BWD  13  // IN2 - правый мотор назад (было 15)
 
 // Настройки ПВМ для моторов
 #define PWM_FREQ         30000  // Частота ПВМ 30 кГц (выше слышимого диапазона)
