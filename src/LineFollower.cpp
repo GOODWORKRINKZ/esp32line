@@ -56,7 +56,8 @@ void LineFollower::update() {
                 }
                 Serial.printf("[%lu] ✓ Энкодеры обнулены → ПОИСК\n", millis());
                 
-                // Переходим в режим поиска
+                // FIXED: Линия СЛЕВА (turn=LEFT) → ищем ВЛЕВО (SEARCHING_LEFT)
+                //        Линия СПРАВА (turn=RIGHT) → ищем ВПРАВО (SEARCHING_RIGHT)
                 currentState = (turnDirection == TURN_LEFT) ? SEARCHING_LEFT : SEARCHING_RIGHT;
                 searchStartTime = millis();
             }
@@ -247,8 +248,10 @@ void LineFollower::followLine() {
                 // Резкое отклонение - это поворот трассы!
                 motors.stop();
                 
-                // Определяем направление будущего поворота
-                turnDirection = (lastPosition > 0) ? TURN_RIGHT : TURN_LEFT;
+                // FIXED: Определяем направление по ПОЗИЦИИ:
+                // lastPosition < 0 (линия СЛЕВА) → TURN_LEFT (ищем влево)
+                // lastPosition > 0 (линия СПРАВА) → TURN_RIGHT (ищем вправо)
+                turnDirection = (lastPosition < 0) ? TURN_LEFT : TURN_RIGHT;
                 
                 // Переходим в режим ожидания (неблокирующий!)
                 waitStartTime = millis();
