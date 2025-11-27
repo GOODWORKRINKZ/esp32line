@@ -28,6 +28,9 @@ public:
     void getGains(float &p, float &i, float &d) const {
         p = kp; i = ki; d = kd;
     }
+    
+    // Получить предыдущую ошибку (для агрессивного PID)
+    float getPreviousError() const { return previousError; }
 };
 
 #endif // PID_CONTROLLER_H

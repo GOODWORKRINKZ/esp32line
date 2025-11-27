@@ -90,6 +90,10 @@
 #define DEFAULT_KI     0.0   // Интегральный коэффициент
 #define DEFAULT_KD     15.0  // Дифференциальный коэффициент
 
+// Агрессивный PID (при большой ошибке)
+#define AGGRESSIVE_KP  50.0   // Kp x2 для резких поворотов
+#define AGGRESSIVE_KD  30.0   // Kd x2 для резких поворотов
+
 // Параметры ПИД для скорости (с энкодерами)
 #define SPEED_KP       2.0
 #define SPEED_KI       0.5
