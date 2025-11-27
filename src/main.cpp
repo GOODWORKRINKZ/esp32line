@@ -66,7 +66,6 @@ void IRAM_ATTR buttonISR() {
 // Обработка нажатия кнопки (переключение старт/стоп)
 void handleButton() {
     if (buttonInterrupt) {
-        buttonInterrupt = false;
         
         // Антидребезг в основном цикле
         unsigned long currentTime = millis();
@@ -81,8 +80,9 @@ void handleButton() {
             robot.start();
         } else {
             // Робот едет - останавливаем
-            robot.pause();
+            robot.stop();
         }
+        buttonInterrupt = false;
     }
 }
 
@@ -206,5 +206,5 @@ void loop() {
     robot.update();
     
     // Небольшая задержка для стабильности
-    delay(10);
+    delay(0);
 }
