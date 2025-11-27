@@ -15,6 +15,7 @@ enum RobotState {
     IDLE,              // Ожидание
     CALIBRATING,       // Калибровка датчиков
     FOLLOWING,         // Следование по линии
+    WAITING_FOR_TURN,  // Ожидание обновления энкодеров перед поворотом
     TURNING,           // Поворот на месте (с контролем энкодеров)
     SEARCHING_LEFT,    // Поиск линии влево
     SEARCHING_RIGHT,   // Поиск линии вправо
@@ -46,6 +47,7 @@ private:
     long turnStartTicksLeft;
     long turnStartTicksRight;
     float targetTurnDegrees;
+    unsigned long waitStartTime;  // Время начала ожидания перед поворотом
     
 public:
     // Конструктор с опциональным параметром энкодеров

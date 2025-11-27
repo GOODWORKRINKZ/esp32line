@@ -47,6 +47,21 @@ void LineFollower::update() {
             followLine();
             break;
             
+        case WAITING_FOR_TURN:
+            // Неблокирующее ожидание обновления энкодеров
+            if (millis() - waitStartTime >= 200) {
+                // Прошло 200мс - обнуляем энкодеры и начинаем поворот
+                if (encoders) {
+                    encoders->resetTicks();
+                }
+                Serial.printf("[%lu] ✓ Энкодеры обнулены → ПОИСК\n", millis());
+                
+                // Переходим в режим поиска
+                currentState = (turnDirection == TURN_LEFT) ? SEARCHING_LEFT : SEARCHING_RIGHT;
+                searchStartTime = millis();
+            }
+            break;
+            
         case TURNING:
             executeTurn();
             break;
@@ -226,9 +241,24 @@ void LineFollower::followLine() {
         if (lastPosition != -999 && timeSinceLine < LINE_MEMORY_TIMEOUT) {
             // ═══════════════════════════════════════════════════════════════
             // ЛИНИЯ ПОТЕРЯНА НО НЕДАВНО БЫЛА ВИДНА
-            // Как у Aarushraj: один мотор назад, другой вперёд в направлении
-            // последней известной позиции
+            // Резкий поворот? ОСТАНАВЛИВАЕМСЯ и ждём обновления энкодеров!
             // ═══════════════════════════════════════════════════════════════
+            if (abs(lastPosition) >= 2.0) {
+                // Резкое отклонение - это поворот трассы!
+                motors.stop();
+                
+                // Определяем направление будущего поворота
+                turnDirection = (lastPosition > 0) ? TURN_RIGHT : TURN_LEFT;
+                
+                // Переходим в режим ожидания (неблокирующий!)
+                waitStartTime = millis();
+                currentState = WAITING_FOR_TURN;
+                
+                Serial.printf("[%lu] ⏸ СТОП перед поворотом (поз=%.1f) → ждём 200мс\n",
+                              millis(), lastPosition);
+                return;
+            }
+            
             int leftSpeed, rightSpeed;
             
             if (lastPosition > 0) {
@@ -270,7 +300,7 @@ void LineFollower::followLine() {
     float absError = abs(error);
     
     // Пороги для PID режимов (с учётом весов датчиков -3..+3)
-    const float AGGRESSIVE_THRESHOLD = 1.5;  // Агрессивный PID
+    const float AGGRESSIVE_THRESHOLD = 2.5;  // Только для ОЧЕНЬ резких отклонений
     
     // Определяем режим
     const char* mode;
@@ -280,8 +310,7 @@ void LineFollower::followLine() {
     float correction;
     if (absError >= AGGRESSIVE_THRESHOLD) {
         // ═══════════════════════════════════════════════════════════════════
-        // АГРЕССИВНЫЙ PID (как у amjed-ali-k при error > 200)
-        // Увеличенные коэффициенты для резких поворотов
+        // АГРЕССИВНЫЙ PID - только для критических отклонений
         // ═══════════════════════════════════════════════════════════════════
         mode = "АГРЕСС";
         correction = AGGRESSIVE_KP * error + AGGRESSIVE_KD * (error - pid.getPreviousError());
