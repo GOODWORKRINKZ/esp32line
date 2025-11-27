@@ -142,9 +142,8 @@ void LineFollower::executeTurn() {
     if (encoders) {
         long leftTicks = abs(encoders->getLeftTicks());
         long rightTicks = abs(encoders->getRightTicks());
-        // Используем МАКСИМУМ из двух энкодеров, потому что при повороте на месте
-        // один мотор может крутиться быстрее другого (разная мёртвая зона)
-        long maxTicks = max(leftTicks, rightTicks);
+        // Используем СРЕДНЕЕ из двух энкодеров для точного контроля угла
+        long avgTicks = (leftTicks + rightTicks) / 2;
         
         // Сколько тиков нужно для целевого угла
         float targetTicks = targetTurnDegrees * TICKS_PER_DEGREE;
@@ -152,14 +151,14 @@ void LineFollower::executeTurn() {
 #ifdef DEBUG_MODE
         static unsigned long lastTurnDebug = 0;
         if (millis() - lastTurnDebug > 100) {
-            Serial.printf("🔄 Поворот: тики L=%ld R=%ld (макс=%ld), цель=%.1f, позиция=%.2f\n", 
-                          leftTicks, rightTicks, maxTicks, targetTicks, position);
+            Serial.printf("🔄 Поворот: тики L=%ld R=%ld (сред=%ld), цель=%.1f, позиция=%.2f\n", 
+                          leftTicks, rightTicks, avgTicks, targetTicks, position);
             lastTurnDebug = millis();
         }
 #endif
         
         // Если повернули достаточно - ищем линию
-        if (maxTicks >= targetTicks) {
+        if (avgTicks >= targetTicks) {
             motors.stop();
             Serial.printf("⚠ Повернули %.1f° но линия не найдена, ищем...\n", targetTurnDegrees);
             currentState = (turnDirection == TURN_LEFT) ? SEARCHING_RIGHT : SEARCHING_LEFT;
@@ -169,13 +168,26 @@ void LineFollower::executeTurn() {
     }
     
     // Выполняем поворот
+    int leftCmd, rightCmd;
     if (turnDirection == TURN_RIGHT) {
         // Поворот ВПРАВО: левое вперёд, правое назад
-        motors.setSpeed(TURN_SPEED, -TURN_SPEED);
+        leftCmd = TURN_SPEED;
+        rightCmd = -TURN_SPEED;
     } else {
         // Поворот ВЛЕВО: левое назад, правое вперёд
-        motors.setSpeed(-TURN_SPEED, TURN_SPEED);
+        leftCmd = -TURN_SPEED;
+        rightCmd = TURN_SPEED;
     }
+    
+    motors.setSpeed(leftCmd, rightCmd);
+    
+#ifdef DEBUG_MODE
+    static unsigned long lastMotorDebug = 0;
+    if (millis() - lastMotorDebug > 500) {
+        Serial.printf("⚙ Моторы поворота: L=%d R=%d\n", leftCmd, rightCmd);
+        lastMotorDebug = millis();
+    }
+#endif
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
