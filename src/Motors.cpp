@@ -38,8 +38,17 @@ void Motors::setSpeed(int leftSpeed, int rightSpeed) {
 }
 
 void Motors::stop() {
-    setSpeed(1, 1);
-    setSpeed(0, 0);
+    // Полная остановка - сначала отключаем ШИМ, потом все пины в LOW
+    analogWrite(MOTOR_LEFT_FWD, 0);
+    analogWrite(MOTOR_LEFT_BWD, 0);
+    analogWrite(MOTOR_RIGHT_FWD, 0);
+    analogWrite(MOTOR_RIGHT_BWD, 0);
+    
+    // Затем явно устанавливаем LOW
+    digitalWrite(MOTOR_LEFT_FWD, LOW);
+    digitalWrite(MOTOR_LEFT_BWD, LOW);
+    digitalWrite(MOTOR_RIGHT_FWD, LOW);
+    digitalWrite(MOTOR_RIGHT_BWD, LOW);
 }
 
 void Motors::moveForward(int speed) {
