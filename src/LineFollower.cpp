@@ -59,6 +59,7 @@ void LineFollower::start() {
     Serial.println("▶ СТАРТ - Начинаю следование по линии");
     currentState = FOLLOWING;
     pid.reset();
+    sensors.resetPositionMemory();
 }
 
 void LineFollower::pause() {
@@ -95,11 +96,30 @@ void LineFollower::followLine() {
     
     // Проверка: линия найдена?
     if (position == -999) {
-        // Линия потеряна - начинаем поиск
-        Serial.println("⚠ Линия потеряна! Начинаю поиск...");
-        currentState = SEARCHING_LEFT;
-        searchStartTime = millis();
-        return;
+        // Линия не видна датчиками - проверяем память позиции
+        unsigned long timeSinceLine = millis() - sensors.getLastPositionTime();
+        float lastPosition = sensors.getLastKnownPosition();
+        
+        // Проверяем что есть валидная сохранённая позиция и она не устарела
+        if (lastPosition != -999 && timeSinceLine < LINE_MEMORY_TIMEOUT) {
+            // Используем последнюю известную позицию (линия между датчиками)
+            position = lastPosition;
+            
+#ifdef DEBUG_MODE
+            static unsigned long lastMemoryDebugTime = 0;
+            if (millis() - lastMemoryDebugTime > 100) {
+                Serial.printf("📍 Использую память позиции: %.2f (прошло %lu мс)\n", 
+                              position, timeSinceLine);
+                lastMemoryDebugTime = millis();
+            }
+#endif
+        } else {
+            // Линия действительно потеряна - начинаем поиск
+            Serial.println("⚠ Линия потеряна! Начинаю поиск...");
+            currentState = SEARCHING_LEFT;
+            searchStartTime = millis();
+            return;
+        }
     }
     
     // Вычисляем ошибку (отклонение от центра)
