@@ -10,6 +10,10 @@ private:
     int sensorMin[5];
     int sensorMax[5];
     
+    // Последняя известная позиция линии (для случаев когда линия между датчиками)
+    float lastKnownPosition;
+    unsigned long lastPositionTime;  // Время последнего обнаружения линии
+    
 public:
     LineSensors();
     
@@ -24,6 +28,15 @@ public:
     
     // Калибровка датчиков
     void calibrate();
+    
+    // Получить последнюю известную позицию линии
+    float getLastKnownPosition() const { return lastKnownPosition; }
+    
+    // Получить время последнего обнаружения линии (мс)
+    unsigned long getLastPositionTime() const { return lastPositionTime; }
+    
+    // Сбросить память позиции
+    void resetPositionMemory();
     
     // Получить минимальные значения
     void getMin(int min[5]) { 

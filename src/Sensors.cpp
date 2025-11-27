@@ -1,6 +1,6 @@
 #include "Sensors.h"
 
-LineSensors::LineSensors() {
+LineSensors::LineSensors() : lastKnownPosition(0), lastPositionTime(0) {
     // Инициализация массивов калибровки
     for(int i = 0; i < 5; i++) {
         sensorMin[i] = 0;
@@ -56,7 +56,13 @@ float LineSensors::calculatePosition(int sensors[5]) {
     }
     
     // Нормализованная позиция
-    return weightedSum / totalActiveSensors;
+    float position = weightedSum / totalActiveSensors;
+    
+    // Сохраняем последнюю известную позицию
+    lastKnownPosition = position;
+    lastPositionTime = millis();
+    
+    return position;
 }
 
 void LineSensors::calibrate() {
@@ -88,4 +94,9 @@ void LineSensors::calibrate() {
     for (int i = 0; i < 5; i++) {
         Serial.printf("  Датчик %d: min=%d, max=%d\n", i + 1, sensorMin[i], sensorMax[i]);
     }
+}
+
+void LineSensors::resetPositionMemory() {
+    lastKnownPosition = 0;
+    lastPositionTime = 0;
 }
