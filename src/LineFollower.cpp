@@ -142,7 +142,9 @@ void LineFollower::executeTurn() {
     if (encoders) {
         long leftTicks = abs(encoders->getLeftTicks());
         long rightTicks = abs(encoders->getRightTicks());
-        long avgTicks = (leftTicks + rightTicks) / 2;
+        // Используем МАКСИМУМ из двух энкодеров, потому что при повороте на месте
+        // один мотор может крутиться быстрее другого (разная мёртвая зона)
+        long maxTicks = max(leftTicks, rightTicks);
         
         // Сколько тиков нужно для целевого угла
         float targetTicks = targetTurnDegrees * TICKS_PER_DEGREE;
@@ -150,14 +152,14 @@ void LineFollower::executeTurn() {
 #ifdef DEBUG_MODE
         static unsigned long lastTurnDebug = 0;
         if (millis() - lastTurnDebug > 100) {
-            Serial.printf("🔄 Поворот: тики L=%ld R=%ld, цель=%.1f, позиция=%.2f\n", 
-                          leftTicks, rightTicks, targetTicks, position);
+            Serial.printf("🔄 Поворот: тики L=%ld R=%ld (макс=%ld), цель=%.1f, позиция=%.2f\n", 
+                          leftTicks, rightTicks, maxTicks, targetTicks, position);
             lastTurnDebug = millis();
         }
 #endif
         
         // Если повернули достаточно - ищем линию
-        if (avgTicks >= targetTicks) {
+        if (maxTicks >= targetTicks) {
             motors.stop();
             Serial.printf("⚠ Повернули %.1f° но линия не найдена, ищем...\n", targetTurnDegrees);
             currentState = (turnDirection == TURN_LEFT) ? SEARCHING_RIGHT : SEARCHING_LEFT;
