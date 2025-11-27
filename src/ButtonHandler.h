@@ -3,8 +3,8 @@
 
 #include <Arduino.h>
 
-// Время антидребезга кнопки в миллисекундах
-#define BUTTON_DEBOUNCE_TIME 150
+// Таймиги кнопки в миллисекундах
+#define BUTTON_DEBOUNCE_TIME 100      // Антидребезг (оптимально для механических кнопок)
 
 // Тип функции обратного вызова
 typedef void (*ButtonCallback)();

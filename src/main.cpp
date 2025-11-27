@@ -8,7 +8,7 @@
 #include "ButtonHandler.h"
 
 // Forward declarations
-void printHelp();
+void robotTask(void* parameter);
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
@@ -55,91 +55,49 @@ LineFollower robot(sensors, motors, pid, nullptr);
 // Кнопка: пин 4 → резистор 10кОм → GND, при нажатии замыкается на 3.3V (Active HIGH)
 ButtonHandler button(BUTTON_PIN, false); // false = кнопка к VCC (Active HIGH)
 
+// Флаг для безопасной обработки нажатия кнопки вне ISR
+volatile bool buttonPressed = false;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ОБРАБОТКА КНОПКИ СТАРТ/СТОП (ButtonHandler с прерываниями)
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Callback-функция для обработки нажатия кнопки
-// Вызывается из прерывания ButtonHandler
+// Вызывается из прерывания ButtonHandler - ДОЛЖНА БЫТЬ МАКСИМАЛЬНО БЫСТРОЙ!
 void IRAM_ATTR onButtonPressed()
 {
-    // Получаем текущее состояние робота
-    RobotState state = robot.getState();
-    
-    // Отладка: выводим счётчик нажатий
-    Serial.printf("\n[BUTTON] Нажатие #%lu | ", button.getPressCount());
-    
-    if (state == IDLE || state == STOPPED || state == LOST)
-    {
-        // Робот стоит - запускаем
-        robot.start();
-        Serial.println("Старт!");
-    }
-    else
-    {
-        // Робот едет - останавливаем
-        robot.stop();
-        Serial.println("Стоп!");
-    }
+    // В ISR ТОЛЬКО устанавливаем флаг - никаких тяжёлых операций!
+    buttonPressed = true;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ОБРАБОТКА КОМАНД ИЗ SERIAL
+// ЗАДАЧА РОБОТА (FreeRTOS Task)
 // ═══════════════════════════════════════════════════════════════════════════
 
-void handleSerialCommands() {
-    if (Serial.available() > 0) {
-        char command = Serial.read();
-        
-        switch (command) {
-            case 's':
-            case 'S':
+void robotTask(void* parameter) {
+    Serial.println("[TASK] Задача робота запущена на Core 1");
+    
+    while (true) {
+        // Обработка флага кнопки (безопасно, вне ISR)
+        if (buttonPressed) {
+            buttonPressed = false;
+            
+            RobotState state = robot.getState();
+            if (state == IDLE || state == STOPPED || state == LOST) {
                 robot.start();
-                break;
-                
-            case 'p':
-            case 'P':
-                robot.pause();
-                break;
-                
-            case 'c':
-            case 'C':
-                robot.calibrate();
-                break;
-                
-            case '+':
-                robot.increaseSpeed();
-                break;
-                
-            case '-':
-                robot.decreaseSpeed();
-                break;
-                
-            case 'h':
-            case 'H':
-            case '?':
-                printHelp();
-                break;
+                Serial.println("[BUTTON] Старт!");
+            } else {
+                robot.stop();
+                Serial.println("[BUTTON] Стоп!");
+            }
         }
+        
+        // Обновление состояния робота
+        robot.update();
+        
+        // Небольшая задержка для стабильности
+        vTaskDelay(1);  // 1 тик FreeRTOS (~1ms)
     }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// СПРАВКА
-// ═══════════════════════════════════════════════════════════════════════════
-
-void printHelp() {
-    Serial.println("\n╔════════════════════════════════════════════╗");
-    Serial.println("║           КОМАНДЫ УПРАВЛЕНИЯ              ║");
-    Serial.println("╠════════════════════════════════════════════╣");
-    Serial.println("║  КНОПКА - Старт/Стоп (переключение)       ║");
-    Serial.println("║  s  - Старт (начать следование)           ║");
-    Serial.println("║  p  - Пауза (остановить)                  ║");
-    Serial.println("║  c  - Калибровка датчиков                 ║");
-    Serial.println("║  +  - Увеличить скорость                  ║");
-    Serial.println("║  -  - Уменьшить скорость                  ║");
-    Serial.println("║  h  - Показать эту справку                ║");
-    Serial.println("╚════════════════════════════════════════════╝\n");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -183,21 +141,26 @@ void setup() {
     
     Serial.println("Робот готов к работе!");
     Serial.println("Поместите робота на линию и нажмите кнопку для старта");
-    Serial.println("Повторное нажатие кнопки остановит робота");
-    Serial.println("Команды Serial: s=старт, p=стоп, c=калибровка, h=справка\n");
+    Serial.println("Повторное нажатие кнопки остановит робота\n");
+    
+    // Создаём задачу FreeRTOS для робота на ядре 1 (ядро 0 для WiFi/BT)
+    xTaskCreatePinnedToCore(
+        robotTask,        // Функция задачи
+        "RobotTask",      // Название задачи
+        10000,            // Размер стека (байты)
+        NULL,             // Параметры
+        1,                // Приоритет (1 = нормальный)
+        NULL,             // Дескриптор задачи
+        1                 // Ядро процессора (0 или 1)
+    );
+    
+    Serial.println("[OK] Задача робота создана на Core 1\n");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LOOP - ОСНОВНОЙ ЦИКЛ
+// LOOP - ОСНОВНОЙ ЦИКЛ (минимальная загрузка для кнопки)
 // ═══════════════════════════════════════════════════════════════════════════
 
 void loop() {
-    // Обработка команд из Serial
-    handleSerialCommands();
     
-    // Обновление состояния робота
-    robot.update();
-    
-    // Небольшая задержка для стабильности
-    delay(10);
 }
