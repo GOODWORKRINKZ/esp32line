@@ -4,7 +4,9 @@
 // Конструктор
 LineFollower::LineFollower(LineSensors& s, Motors& m, PIDController& p, Encoders* e)
     : sensors(s), motors(m), pid(p), encoders(e),
-      currentState(IDLE), baseSpeed(BASE_SPEED), searchStartTime(0) {
+      currentState(IDLE), baseSpeed(BASE_SPEED), searchStartTime(0),
+      turnDirection(TURN_NONE), turnStartTicksLeft(0), turnStartTicksRight(0),
+      targetTurnDegrees(0) {
 }
 
 void LineFollower::begin() {
@@ -13,6 +15,9 @@ void LineFollower::begin() {
     
     if (encoders) {
         encoders->begin();
+        Serial.println("[OK] Энкодеры инициализированы");
+        Serial.printf("[INFO] Кинематика: %.2f тиков/градус, %.2f мм/тик\n", 
+                      TICKS_PER_DEGREE, MM_PER_TICK);
     }
     
     currentState = IDLE;
@@ -42,6 +47,10 @@ void LineFollower::update() {
             followLine();
             break;
             
+        case TURNING:
+            executeTurn();
+            break;
+            
         case SEARCHING_LEFT:
         case SEARCHING_RIGHT:
             searchLine();
@@ -49,7 +58,7 @@ void LineFollower::update() {
             
         case LOST:
             motors.stop();
-            Serial.println("⚠ ЛИНИЯ ПОТЕРЯНА! Отправьте 's' для повторного поиска");
+            Serial.println("⚠ ЛИНИЯ ПОТЕРЯНА! Нажмите кнопку для повторного поиска");
             currentState = IDLE;
             break;
     }
@@ -60,6 +69,7 @@ void LineFollower::start() {
     currentState = FOLLOWING;
     pid.reset();
     sensors.resetPositionMemory();
+    turnDirection = TURN_NONE;
 }
 
 void LineFollower::pause() {
@@ -88,6 +98,87 @@ void LineFollower::decreaseSpeed() {
     Serial.printf("Скорость уменьшена: %d\n", baseSpeed);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// НАЧАТЬ ПОВОРОТ НА МЕСТЕ (с контролем энкодеров)
+// ═══════════════════════════════════════════════════════════════════════════
+void LineFollower::startTurn(TurnDirection dir, float degrees) {
+    turnDirection = dir;
+    targetTurnDegrees = degrees;
+    
+    if (encoders) {
+        // Сбрасываем и запоминаем начальные тики
+        encoders->resetTicks();
+        turnStartTicksLeft = 0;
+        turnStartTicksRight = 0;
+    }
+    
+    currentState = TURNING;
+    
+#ifdef DEBUG_MODE
+    const char* dirStr = (dir == TURN_LEFT) ? "ВЛЕВО" : "ВПРАВО";
+    Serial.printf("🔄 Начинаю поворот %s на %.1f°\n", dirStr, degrees);
+#endif
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ВЫПОЛНЕНИЕ ПОВОРОТА (с контролем энкодеров)
+// ═══════════════════════════════════════════════════════════════════════════
+void LineFollower::executeTurn() {
+    // Сначала проверяем датчики - может линия уже под центром?
+    int sensorValues[5];
+    sensors.read(sensorValues);
+    float position = sensors.calculatePosition(sensorValues);
+    
+    // Если линия вернулась в центр - завершаем поворот
+    if (position != -999 && abs(position) < 0.5) {
+        motors.stop();
+        currentState = FOLLOWING;
+        pid.reset();
+        Serial.println("✓ Линия в центре, продолжаю движение");
+        return;
+    }
+    
+    // Проверяем энкодеры - не повернули ли достаточно?
+    if (encoders) {
+        long leftTicks = abs(encoders->getLeftTicks());
+        long rightTicks = abs(encoders->getRightTicks());
+        long avgTicks = (leftTicks + rightTicks) / 2;
+        
+        // Сколько тиков нужно для целевого угла
+        float targetTicks = targetTurnDegrees * TICKS_PER_DEGREE;
+        
+#ifdef DEBUG_MODE
+        static unsigned long lastTurnDebug = 0;
+        if (millis() - lastTurnDebug > 100) {
+            Serial.printf("🔄 Поворот: тики L=%ld R=%ld, цель=%.1f, позиция=%.2f\n", 
+                          leftTicks, rightTicks, targetTicks, position);
+            lastTurnDebug = millis();
+        }
+#endif
+        
+        // Если повернули достаточно - ищем линию
+        if (avgTicks >= targetTicks) {
+            motors.stop();
+            Serial.printf("⚠ Повернули %.1f° но линия не найдена, ищем...\n", targetTurnDegrees);
+            currentState = (turnDirection == TURN_LEFT) ? SEARCHING_RIGHT : SEARCHING_LEFT;
+            searchStartTime = millis();
+            return;
+        }
+    }
+    
+    // Выполняем поворот
+    if (turnDirection == TURN_RIGHT) {
+        // Поворот ВПРАВО: левое вперёд, правое назад
+        motors.setSpeed(TURN_SPEED, -TURN_SPEED);
+    } else {
+        // Поворот ВЛЕВО: левое назад, правое вперёд
+        motors.setSpeed(-TURN_SPEED, TURN_SPEED);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// СЛЕДОВАНИЕ ПО ЛИНИИ
+// ═══════════════════════════════════════════════════════════════════════════
 void LineFollower::followLine() {
     int sensorValues[5];
     sensors.read(sensorValues);
@@ -102,13 +193,13 @@ void LineFollower::followLine() {
         
         // Проверяем что есть валидная сохранённая позиция и она не устарела
         if (lastPosition != -999 && timeSinceLine < LINE_MEMORY_TIMEOUT) {
-            // Используем последнюю известную позицию (линия между датчиками)
+            // Используем последнюю известную позицию
             position = lastPosition;
             
 #ifdef DEBUG_MODE
             static unsigned long lastMemoryDebugTime = 0;
             if (millis() - lastMemoryDebugTime > 100) {
-                Serial.printf("📍 Использую память позиции: %.2f (прошло %lu мс)\n", 
+                Serial.printf("📍 Память позиции: %.2f (прошло %lu мс)\n", 
                               position, timeSinceLine);
                 lastMemoryDebugTime = millis();
             }
@@ -128,13 +219,72 @@ void LineFollower::followLine() {
     // ПИД-регулятор
     float correction = pid.calculate(error);
     
-    // Применяем корректировку к скоростям моторов
-    int leftSpeed = baseSpeed + correction;
-    int rightSpeed = baseSpeed - correction;
+    // ═══════════════════════════════════════════════════════════════════════
+    // ДИФФЕРЕНЦИАЛЬНОЕ УПРАВЛЕНИЕ С ПОВОРОТОМ НА МЕСТЕ
+    // ═══════════════════════════════════════════════════════════════════════
     
-    // Ограничиваем скорости
-    leftSpeed = constrain(leftSpeed, MIN_SPEED, MAX_SPEED);
-    rightSpeed = constrain(rightSpeed, MIN_SPEED, MAX_SPEED);
+    int leftSpeed, rightSpeed;
+    float absError = abs(error);
+    
+    // Пороги для разных режимов управления
+    const float TURN_IN_PLACE_THRESHOLD = 1.0;  // Поворот на месте (ошибка >= 1.0)
+    const float AGGRESSIVE_THRESHOLD = 0.5;      // Агрессивная коррекция
+    
+    // Определяем режим
+    const char* mode;
+    
+    if (absError >= TURN_IN_PLACE_THRESHOLD) {
+        // ═══════════════════════════════════════════════════════════════════
+        // РЕЖИМ: ПОВОРОТ НА МЕСТЕ
+        // Линия далеко от центра - останавливаемся и крутимся на месте!
+        // ═══════════════════════════════════════════════════════════════════
+        mode = "ПОВОРОТ";
+        
+        if (encoders) {
+            // С энкодерами - используем контролируемый поворот
+            // Оцениваем угол: ошибка 1.0 ≈ 30°, ошибка 2.0 ≈ 60°
+            float estimatedAngle = absError * 30.0;
+            TurnDirection dir = (error > 0) ? TURN_RIGHT : TURN_LEFT;
+            startTurn(dir, estimatedAngle);
+            return;
+        } else {
+            // Без энкодеров - простой поворот на месте
+            if (error > 0) {
+                leftSpeed = TURN_SPEED;
+                rightSpeed = -TURN_SPEED;
+            } else {
+                leftSpeed = -TURN_SPEED;
+                rightSpeed = TURN_SPEED;
+            }
+        }
+    } else if (absError >= AGGRESSIVE_THRESHOLD) {
+        // ═══════════════════════════════════════════════════════════════════
+        // РЕЖИМ: АГРЕССИВНАЯ КОРРЕКЦИЯ
+        // Линия немного сбоку - одно колесо почти стоит, другое едет
+        // ═══════════════════════════════════════════════════════════════════
+        mode = "АГРЕСС";
+        
+        if (error > 0) {
+            leftSpeed = baseSpeed;
+            rightSpeed = MIN_SPEED;
+        } else {
+            leftSpeed = MIN_SPEED;
+            rightSpeed = baseSpeed;
+        }
+    } else {
+        // ═══════════════════════════════════════════════════════════════════
+        // РЕЖИМ: ПЛАВНАЯ КОРРЕКЦИЯ
+        // Линия почти по центру - едем прямо с небольшой коррекцией
+        // ═══════════════════════════════════════════════════════════════════
+        mode = "ПЛАВНО";
+        
+        leftSpeed = baseSpeed + correction;
+        rightSpeed = baseSpeed - correction;
+        
+        // Ограничиваем скорости
+        leftSpeed = constrain(leftSpeed, MIN_SPEED, MAX_SPEED);
+        rightSpeed = constrain(rightSpeed, MIN_SPEED, MAX_SPEED);
+    }
     
     // Устанавливаем скорости моторов
     motors.setSpeed(leftSpeed, rightSpeed);
@@ -142,19 +292,28 @@ void LineFollower::followLine() {
     // Отладочный вывод
 #ifdef DEBUG_MODE
     static unsigned long lastDebugTime = 0;
-    if (millis() - lastDebugTime > 200) {  // Каждые 200 мс
+    if (millis() - lastDebugTime > 200) {
         Serial.print("Датчики: ");
         for (int i = 0; i < 5; i++) {
             Serial.print(sensorValues[i]);
             Serial.print(" ");
         }
-        Serial.printf("| Позиция: %.2f | Ошибка: %.2f | Коррекция: %.1f | Моторы: L=%d R=%d\n",
-                      position, error, correction, leftSpeed, rightSpeed);
+        Serial.printf("| Поз: %.2f | %s | L=%d R=%d", position, mode, leftSpeed, rightSpeed);
+        
+        // Показываем скорости с энкодеров
+        if (encoders) {
+            Serial.printf(" | Энк: L=%.0f R=%.0f мм/с", 
+                          encoders->getLeftSpeed(), encoders->getRightSpeed());
+        }
+        Serial.println();
         lastDebugTime = millis();
     }
 #endif
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ПОИСК ЛИНИИ
+// ═══════════════════════════════════════════════════════════════════════════
 void LineFollower::searchLine() {
     int sensorValues[5];
     sensors.read(sensorValues);
@@ -178,7 +337,7 @@ void LineFollower::searchLine() {
     
     // Выполняем поиск (поворот на месте)
     if (currentState == SEARCHING_LEFT) {
-        motors.turnLeft(TURN_SPEED);
+        motors.setSpeed(-TURN_SPEED, TURN_SPEED);  // Поворот влево на месте
         
         // Переключаемся на поиск вправо через половину времени
         if (millis() - searchStartTime > SEARCH_TIMEOUT / 2) {
@@ -186,6 +345,6 @@ void LineFollower::searchLine() {
             currentState = SEARCHING_RIGHT;
         }
     } else {
-        motors.turnRight(TURN_SPEED);
+        motors.setSpeed(TURN_SPEED, -TURN_SPEED);  // Поворот вправо на месте
     }
 }
