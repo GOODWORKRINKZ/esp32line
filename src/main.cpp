@@ -52,7 +52,8 @@ LineFollower robot(sensors, motors, pid, nullptr);
 #endif
 
 // Обработчик кнопки (адаптировано из примера release-mechanism для ESP32)
-ButtonHandler button(BUTTON_PIN, true); // true = кнопка к GND
+// Кнопка: пин 4 → резистор 10кОм → GND, при нажатии замыкается на 3.3V (Active HIGH)
+ButtonHandler button(BUTTON_PIN, false); // false = кнопка к VCC (Active HIGH)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ОБРАБОТКА КНОПКИ СТАРТ/СТОП (ButtonHandler с прерываниями)
@@ -198,5 +199,5 @@ void loop() {
     robot.update();
     
     // Небольшая задержка для стабильности
-    delay(0);
+    delay(10);
 }
