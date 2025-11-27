@@ -361,7 +361,7 @@ void IRAM_ATTR buttonISR() {
 void setup() {
     Serial.begin(115200);
     pinMode(4, INPUT_PULLUP);
-    attachInterrupt(4, buttonISR, FALLING);
+    attachInterrupt(digitalPinToInterrupt(4), buttonISR, FALLING);
     Serial.println("Нажмите кнопку...");
 }
 

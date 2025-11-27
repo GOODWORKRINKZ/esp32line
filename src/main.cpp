@@ -48,8 +48,8 @@ LineFollower robot(sensors, motors, pid, nullptr);
 #endif
 
 // Переменные для обработки кнопки
-volatile unsigned long lastButtonPress = 0;
-volatile bool buttonPressed = false;
+volatile bool buttonInterrupt = false;
+unsigned long lastButtonPress = 0;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ОБРАБОТКА КНОПКИ СТАРТ/СТОП
@@ -57,17 +57,20 @@ volatile bool buttonPressed = false;
 
 // Обработчик прерывания кнопки
 void IRAM_ATTR buttonISR() {
-    unsigned long currentTime = millis();
-    if (currentTime - lastButtonPress > BUTTON_DEBOUNCE_MS) {
-        buttonPressed = true;
-        lastButtonPress = currentTime;
-    }
+    buttonInterrupt = true;
 }
 
 // Обработка нажатия кнопки (переключение старт/стоп)
 void handleButton() {
-    if (buttonPressed) {
-        buttonPressed = false;
+    if (buttonInterrupt) {
+        buttonInterrupt = false;
+        
+        // Антидребезг в основном цикле
+        unsigned long currentTime = millis();
+        if (currentTime - lastButtonPress < BUTTON_DEBOUNCE_MS) {
+            return;
+        }
+        lastButtonPress = currentTime;
         
         RobotState state = robot.getState();
         if (state == IDLE || state == STOPPED || state == LOST) {
