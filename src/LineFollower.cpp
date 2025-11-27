@@ -249,8 +249,8 @@ void LineFollower::followLine() {
         
         if (encoders) {
             // С энкодерами - используем контролируемый поворот
-            // Оцениваем угол: ошибка 1.5 ≈ 30°, ошибка 2.0 ≈ 45°
-            float estimatedAngle = (absError - 1.0) * 30.0 + 15.0;
+            // Оцениваем угол по формуле из Config.h
+            float estimatedAngle = (absError - MIN_TURN_ERROR) * DEGREES_PER_ERROR + BASE_TURN_ANGLE;
             TurnDirection dir = (error > 0) ? TURN_RIGHT : TURN_LEFT;
             startTurn(dir, estimatedAngle);
             return;
