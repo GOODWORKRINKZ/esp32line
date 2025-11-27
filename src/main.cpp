@@ -5,6 +5,7 @@
 #include "PIDController.h"
 #include "Encoders.h"
 #include "LineFollower.h"
+#include "ButtonHandler.h"
 
 // Forward declarations
 void printHelp();
@@ -50,39 +51,34 @@ LineFollower robot(sensors, motors, pid, &encoders);
 LineFollower robot(sensors, motors, pid, nullptr);
 #endif
 
-// Переменные для обработки кнопки
-volatile bool buttonInterrupt = false;
-unsigned long lastButtonPress = 0;
+// Обработчик кнопки (адаптировано из примера release-mechanism для ESP32)
+ButtonHandler button(BUTTON_PIN, true); // true = кнопка к GND
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ОБРАБОТКА КНОПКИ СТАРТ/СТОП
+// ОБРАБОТКА КНОПКИ СТАРТ/СТОП (ButtonHandler с прерываниями)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Обработчик прерывания кнопки
-void IRAM_ATTR buttonISR() {
-    buttonInterrupt = true;
-}
-
-// Обработка нажатия кнопки (переключение старт/стоп)
-void handleButton() {
-    if (buttonInterrupt) {
-        
-        // Антидребезг в основном цикле
-        unsigned long currentTime = millis();
-        if (currentTime - lastButtonPress < BUTTON_DEBOUNCE_MS) {
-            return;
-        }
-        lastButtonPress = currentTime;
-        
-        RobotState state = robot.getState();
-        if (state == IDLE || state == STOPPED || state == LOST) {
-            // Робот стоит - запускаем
-            robot.start();
-        } else {
-            // Робот едет - останавливаем
-            robot.stop();
-        }
-        buttonInterrupt = false;
+// Callback-функция для обработки нажатия кнопки
+// Вызывается из прерывания ButtonHandler
+void IRAM_ATTR onButtonPressed()
+{
+    // Получаем текущее состояние робота
+    RobotState state = robot.getState();
+    
+    // Отладка: выводим счётчик нажатий
+    Serial.printf("\n[BUTTON] Нажатие #%lu | ", button.getPressCount());
+    
+    if (state == IDLE || state == STOPPED || state == LOST)
+    {
+        // Робот стоит - запускаем
+        robot.start();
+        Serial.println("Старт!");
+    }
+    else
+    {
+        // Робот едет - останавливаем
+        robot.stop();
+        Serial.println("Стоп!");
     }
 }
 
@@ -159,10 +155,9 @@ void setup() {
     Serial.println("║  5 датчиков TCRT5000 + ПИД-регулятор     ║");
     Serial.println("╚════════════════════════════════════════════╝\n");
     
-    // Инициализация кнопки старт/стоп
-    pinMode(BUTTON_PIN, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, RISING);
-    Serial.println("[OK] Кнопка старт/стоп инициализирована");
+    // Инициализация кнопки старт/стоп с использованием ButtonHandler
+    button.init(onButtonPressed);
+    Serial.println("[OK] Кнопка старт/стоп инициализирована (ButtonHandler + ISR)");
     
     // Инициализация робота
     robot.begin();
@@ -196,9 +191,6 @@ void setup() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 void loop() {
-    // Обработка кнопки старт/стоп
-    handleButton();
-    
     // Обработка команд из Serial
     handleSerialCommands();
     
