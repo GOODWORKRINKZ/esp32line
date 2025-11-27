@@ -47,6 +47,42 @@ LineFollower robot(sensors, motors, pid, &encoders);
 LineFollower robot(sensors, motors, pid, nullptr);
 #endif
 
+// Переменные для обработки кнопки
+volatile bool buttonInterrupt = false;
+unsigned long lastButtonPress = 0;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ОБРАБОТКА КНОПКИ СТАРТ/СТОП
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Обработчик прерывания кнопки
+void IRAM_ATTR buttonISR() {
+    buttonInterrupt = true;
+}
+
+// Обработка нажатия кнопки (переключение старт/стоп)
+void handleButton() {
+    if (buttonInterrupt) {
+        buttonInterrupt = false;
+        
+        // Антидребезг в основном цикле
+        unsigned long currentTime = millis();
+        if (currentTime - lastButtonPress < BUTTON_DEBOUNCE_MS) {
+            return;
+        }
+        lastButtonPress = currentTime;
+        
+        RobotState state = robot.getState();
+        if (state == IDLE || state == STOPPED || state == LOST) {
+            // Робот стоит - запускаем
+            robot.start();
+        } else {
+            // Робот едет - останавливаем
+            robot.pause();
+        }
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ОБРАБОТКА КОМАНД ИЗ SERIAL
 // ═══════════════════════════════════════════════════════════════════════════
@@ -96,7 +132,8 @@ void printHelp() {
     Serial.println("\n╔════════════════════════════════════════════╗");
     Serial.println("║           КОМАНДЫ УПРАВЛЕНИЯ              ║");
     Serial.println("╠════════════════════════════════════════════╣");
-    Serial.println("║  s  - Старт (начать следование)          ║");
+    Serial.println("║  КНОПКА - Старт/Стоп (переключение)       ║");
+    Serial.println("║  s  - Старт (начать следование)           ║");
     Serial.println("║  p  - Пауза (остановить)                  ║");
     Serial.println("║  c  - Калибровка датчиков                 ║");
     Serial.println("║  +  - Увеличить скорость                  ║");
@@ -118,6 +155,11 @@ void setup() {
     Serial.println("║  РОБОТ СЛЕДУЮЩИЙ ПО ЛИНИИ - ESP32        ║");
     Serial.println("║  5 датчиков TCRT5000 + ПИД-регулятор     ║");
     Serial.println("╚════════════════════════════════════════════╝\n");
+    
+    // Инициализация кнопки старт/стоп
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
+    Serial.println("[OK] Кнопка старт/стоп инициализирована");
     
     // Инициализация робота
     robot.begin();
@@ -141,8 +183,9 @@ void setup() {
     Serial.println("╚════════════════════════════════════════════╝\n");
     
     Serial.println("Робот готов к работе!");
-    Serial.println("Поместите робота на линию и отправьте 's' для старта");
-    Serial.println("Команды: s=старт, p=стоп, c=калибровка, h=справка\n");
+    Serial.println("Поместите робота на линию и нажмите кнопку для старта");
+    Serial.println("Повторное нажатие кнопки остановит робота");
+    Serial.println("Команды Serial: s=старт, p=стоп, c=калибровка, h=справка\n");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -150,6 +193,9 @@ void setup() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 void loop() {
+    // Обработка кнопки старт/стоп
+    handleButton();
+    
     // Обработка команд из Serial
     handleSerialCommands();
     
