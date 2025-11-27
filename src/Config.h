@@ -17,7 +17,7 @@
 
 // Датчики линии TCRT5000 (цифровые входы)
 #define SENSOR_1  32  // Крайний левый
-#define SENSOR_2  33  // Левый
+#define SENSOR_2  35  // Левый
 #define SENSOR_3  25  // Центральный
 #define SENSOR_4  26  // Правый
 #define SENSOR_5  27  // Крайний правый
