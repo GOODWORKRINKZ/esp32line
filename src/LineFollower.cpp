@@ -184,6 +184,7 @@ void LineFollower::followLine() {
     sensors.read(sensorValues);
     
     float position = sensors.calculatePosition(sensorValues);
+    bool usingMemory = false;  // Флаг: используем память позиции
     
     // Проверка: линия найдена?
     if (position == -999) {
@@ -194,7 +195,9 @@ void LineFollower::followLine() {
         // Проверяем что есть валидная сохранённая позиция и она не устарела
         if (lastPosition != -999 && timeSinceLine < LINE_MEMORY_TIMEOUT) {
             // Используем последнюю известную позицию
+            // ВАЖНО: при использовании памяти НЕ делаем резких поворотов!
             position = lastPosition;
+            usingMemory = true;
             
 #ifdef DEBUG_MODE
             static unsigned long lastMemoryDebugTime = 0;
@@ -227,13 +230,17 @@ void LineFollower::followLine() {
     float absError = abs(error);
     
     // Пороги для разных режимов управления
-    const float TURN_IN_PLACE_THRESHOLD = 1.0;  // Поворот на месте (ошибка >= 1.0)
+    // ВАЖНО: порог 1.5 = только крайние датчики (позиция ±2 при одном крайнем)
+    // или два боковых датчика (позиция ±1.5)
+    const float TURN_IN_PLACE_THRESHOLD = 1.5;  // Поворот на месте (ошибка >= 1.5)
     const float AGGRESSIVE_THRESHOLD = 0.5;      // Агрессивная коррекция
     
     // Определяем режим
     const char* mode;
     
-    if (absError >= TURN_IN_PLACE_THRESHOLD) {
+    // ВАЖНО: НЕ поворачиваем на месте если используем память позиции!
+    // Память = линия между датчиками, нужна только плавная коррекция
+    if (absError >= TURN_IN_PLACE_THRESHOLD && !usingMemory) {
         // ═══════════════════════════════════════════════════════════════════
         // РЕЖИМ: ПОВОРОТ НА МЕСТЕ
         // Линия далеко от центра - останавливаемся и крутимся на месте!
@@ -242,8 +249,8 @@ void LineFollower::followLine() {
         
         if (encoders) {
             // С энкодерами - используем контролируемый поворот
-            // Оцениваем угол: ошибка 1.0 ≈ 30°, ошибка 2.0 ≈ 60°
-            float estimatedAngle = absError * 30.0;
+            // Оцениваем угол: ошибка 1.5 ≈ 30°, ошибка 2.0 ≈ 45°
+            float estimatedAngle = (absError - 1.0) * 30.0 + 15.0;
             TurnDirection dir = (error > 0) ? TURN_RIGHT : TURN_LEFT;
             startTurn(dir, estimatedAngle);
             return;
