@@ -4,10 +4,17 @@ Motors::Motors() {
 }
 
 void Motors::begin() {
-    pinMode(MOTOR_LEFT_FWD, OUTPUT);
-    pinMode(MOTOR_LEFT_BWD, OUTPUT);
-    pinMode(MOTOR_RIGHT_FWD, OUTPUT);
-    pinMode(MOTOR_RIGHT_BWD, OUTPUT);
+    // Настройка ПВМ каналов для управления моторами
+    ledcSetup(PWM_CHANNEL_L_FWD, PWM_FREQ, PWM_RESOLUTION);
+    ledcSetup(PWM_CHANNEL_L_BWD, PWM_FREQ, PWM_RESOLUTION);
+    ledcSetup(PWM_CHANNEL_R_FWD, PWM_FREQ, PWM_RESOLUTION);
+    ledcSetup(PWM_CHANNEL_R_BWD, PWM_FREQ, PWM_RESOLUTION);
+    
+    // Привязка ПВМ каналов к пинам моторов
+    ledcAttachPin(MOTOR_LEFT_FWD, PWM_CHANNEL_L_FWD);
+    ledcAttachPin(MOTOR_LEFT_BWD, PWM_CHANNEL_L_BWD);
+    ledcAttachPin(MOTOR_RIGHT_FWD, PWM_CHANNEL_R_FWD);
+    ledcAttachPin(MOTOR_RIGHT_BWD, PWM_CHANNEL_R_BWD);
     
     stop();
 }
@@ -20,35 +27,29 @@ void Motors::setSpeed(int leftSpeed, int rightSpeed) {
         
     // Левый мотор
     if (leftSpeed >= 0) {
-        analogWrite(MOTOR_LEFT_FWD, leftSpeed);
-        digitalWrite(MOTOR_LEFT_BWD, LOW);
+        ledcWrite(PWM_CHANNEL_L_FWD, leftSpeed);
+        ledcWrite(PWM_CHANNEL_L_BWD, 0);
     } else {
-        digitalWrite(MOTOR_LEFT_FWD, LOW);
-        analogWrite(MOTOR_LEFT_BWD, -leftSpeed);
+        ledcWrite(PWM_CHANNEL_L_FWD, 0);
+        ledcWrite(PWM_CHANNEL_L_BWD, -leftSpeed);
     }
     
     // Правый мотор
     if (rightSpeed >= 0) {
-        analogWrite(MOTOR_RIGHT_FWD, rightSpeed);
-        digitalWrite(MOTOR_RIGHT_BWD, LOW);
+        ledcWrite(PWM_CHANNEL_R_FWD, rightSpeed);
+        ledcWrite(PWM_CHANNEL_R_BWD, 0);
     } else {
-        digitalWrite(MOTOR_RIGHT_FWD, LOW);
-        analogWrite(MOTOR_RIGHT_BWD, -rightSpeed);
+        ledcWrite(PWM_CHANNEL_R_FWD, 0);
+        ledcWrite(PWM_CHANNEL_R_BWD, -rightSpeed);
     }
 }
 
 void Motors::stop() {
-    // Полная остановка - сначала отключаем ШИМ, потом все пины в LOW
-    analogWrite(MOTOR_LEFT_FWD, 0);
-    analogWrite(MOTOR_LEFT_BWD, 0);
-    analogWrite(MOTOR_RIGHT_FWD, 0);
-    analogWrite(MOTOR_RIGHT_BWD, 0);
-    
-    // Затем явно устанавливаем LOW
-    digitalWrite(MOTOR_LEFT_FWD, LOW);
-    digitalWrite(MOTOR_LEFT_BWD, LOW);
-    digitalWrite(MOTOR_RIGHT_FWD, LOW);
-    digitalWrite(MOTOR_RIGHT_BWD, LOW);
+    // Полная остановка - отключаем все ПВМ каналы
+    ledcWrite(PWM_CHANNEL_L_FWD, 0);
+    ledcWrite(PWM_CHANNEL_L_BWD, 0);
+    ledcWrite(PWM_CHANNEL_R_FWD, 0);
+    ledcWrite(PWM_CHANNEL_R_BWD, 0);
 }
 
 void Motors::moveForward(int speed) {

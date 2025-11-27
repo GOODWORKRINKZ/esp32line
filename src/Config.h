@@ -28,6 +28,14 @@
 #define MOTOR_RIGHT_FWD  14  // IN3 - правый мотор вперед
 #define MOTOR_RIGHT_BWD  15  // IN4 - правый мотор назад
 
+// Настройки ПВМ для моторов
+#define PWM_FREQ         30000  // Частота ПВМ 30 кГц (выше слышимого диапазона)
+#define PWM_RESOLUTION   8      // Разрешение 8 бит (0-255)
+#define PWM_CHANNEL_L_FWD  0    // Канал ПВМ для левого мотора вперед
+#define PWM_CHANNEL_L_BWD  1    // Канал ПВМ для левого мотора назад
+#define PWM_CHANNEL_R_FWD  2    // Канал ПВМ для правого мотора вперед
+#define PWM_CHANNEL_R_BWD  3    // Канал ПВМ для правого мотора назад
+
 // Энкодеры FC-03 (опционально, прерывания)
 #define ENCODER_LEFT   16  // Левый энкодер
 #define ENCODER_RIGHT  17  // Правый энкодер
