@@ -29,6 +29,7 @@ void LineFollower::update() {
     switch (currentState) {
         case IDLE:
         case STOPPED:
+            // Гарантируем, что моторы остановлены
             motors.stop();
             break;
             

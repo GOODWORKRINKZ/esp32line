@@ -38,10 +38,7 @@ void Motors::setSpeed(int leftSpeed, int rightSpeed) {
 }
 
 void Motors::stop() {
-    digitalWrite(MOTOR_LEFT_FWD, LOW);
-    digitalWrite(MOTOR_LEFT_BWD, LOW);
-    digitalWrite(MOTOR_RIGHT_FWD, LOW);
-    digitalWrite(MOTOR_RIGHT_BWD, LOW);
+    setSpeed(0, 0);
 }
 
 void Motors::moveForward(int speed) {

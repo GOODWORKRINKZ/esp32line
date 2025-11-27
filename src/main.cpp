@@ -161,7 +161,7 @@ void setup() {
     
     // Инициализация кнопки старт/стоп
     pinMode(BUTTON_PIN, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
+    attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, RISING);
     Serial.println("[OK] Кнопка старт/стоп инициализирована");
     
     // Инициализация робота
