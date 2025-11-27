@@ -17,7 +17,7 @@ void Motors::setSpeed(int leftSpeed, int rightSpeed) {
      * Устанавливает скорость моторов через ШИМ на пинах INx
      * Так как ENA/ENB припаяны к HIGH, используем ШИМ на IN1/IN3 для скорости
      */
-    
+        
     // Левый мотор
     if (leftSpeed >= 0) {
         analogWrite(MOTOR_LEFT_FWD, leftSpeed);
@@ -38,6 +38,7 @@ void Motors::setSpeed(int leftSpeed, int rightSpeed) {
 }
 
 void Motors::stop() {
+    setSpeed(1, 1);
     setSpeed(0, 0);
 }
 
