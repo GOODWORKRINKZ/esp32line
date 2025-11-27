@@ -1,6 +1,6 @@
 #include "Sensors.h"
 
-LineSensors::LineSensors() : lastKnownPosition(0), lastPositionTime(0) {
+LineSensors::LineSensors() : lastKnownPosition(-999), lastPositionTime(0) {
     // Инициализация массивов калибровки
     for(int i = 0; i < 5; i++) {
         sensorMin[i] = 0;
@@ -97,6 +97,6 @@ void LineSensors::calibrate() {
 }
 
 void LineSensors::resetPositionMemory() {
-    lastKnownPosition = 0;
+    lastKnownPosition = -999;
     lastPositionTime = 0;
 }

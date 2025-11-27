@@ -98,10 +98,12 @@ void LineFollower::followLine() {
     if (position == -999) {
         // Линия не видна датчиками - проверяем память позиции
         unsigned long timeSinceLine = millis() - sensors.getLastPositionTime();
+        float lastPosition = sensors.getLastKnownPosition();
         
-        if (timeSinceLine < LINE_MEMORY_TIMEOUT && sensors.getLastPositionTime() > 0) {
+        // Проверяем что есть валидная сохранённая позиция и она не устарела
+        if (lastPosition != -999 && timeSinceLine < LINE_MEMORY_TIMEOUT) {
             // Используем последнюю известную позицию (линия между датчиками)
-            position = sensors.getLastKnownPosition();
+            position = lastPosition;
             
 #ifdef DEBUG_MODE
             static unsigned long lastMemoryDebugTime = 0;
