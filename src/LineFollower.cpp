@@ -168,16 +168,15 @@ void LineFollower::executeTurn() {
     }
     
     // Выполняем поворот
-    // ВАЖНО: Знаки инвертированы для правильного направления поворота!
     int leftCmd, rightCmd;
     if (turnDirection == TURN_RIGHT) {
-        // Поворот ВПРАВО: левое назад, правое вперёд
-        leftCmd = -TURN_SPEED;
-        rightCmd = TURN_SPEED;
-    } else {
-        // Поворот ВЛЕВО: левое вперёд, правое назад
+        // Поворот ВПРАВО: левое вперёд, правое назад
         leftCmd = TURN_SPEED;
         rightCmd = -TURN_SPEED;
+    } else {
+        // Поворот ВЛЕВО: левое назад, правое вперёд
+        leftCmd = -TURN_SPEED;
+        rightCmd = TURN_SPEED;
     }
     
     motors.setSpeed(leftCmd, rightCmd);
