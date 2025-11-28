@@ -20,12 +20,14 @@ void Motors::begin() {
 }
 
 void Motors::setSpeed(int leftSpeed, int rightSpeed) {
-    rightSpeed=rightSpeed*0.8;
-    leftSpeed=leftSpeed*0.8;
     /*
      * Устанавливает скорость моторов через ШИМ на пинах INx
      * Так как ENA/ENB припаяны к HIGH, используем ШИМ на IN1/IN3 для скорости
      */
+    
+    // Применяем калибровочный множитель мощности
+    leftSpeed = leftSpeed * MOTOR_POWER_SCALE;
+    rightSpeed = rightSpeed * MOTOR_POWER_SCALE;
         
     // Левый мотор
     if (leftSpeed >= 0) {

@@ -9,18 +9,15 @@ ButtonHandler::ButtonHandler(int buttonPin, bool activeLow)
       mLastState(false),
       mLastDebounceTime(0),
       mPressCount(0),
-      mCallback(nullptr),
       mButtonState(false),
-      mPendingCallback(false)
+      mPressedFlag(false)
 {
     // Устанавливаем ссылку на текущий экземпляр
     instance = this;
 }
 
-void ButtonHandler::init(ButtonCallback callback)
+void ButtonHandler::init()
 {
-    mCallback = callback;
-    
     // Настройка пина в зависимости от типа подключения
     if (mActiveLow) {
         pinMode(mButtonPin, INPUT_PULLUP); // Кнопка к GND
@@ -68,18 +65,21 @@ void IRAM_ATTR ButtonHandler::handleInterrupt()
     // Определяем нажатие (переход из отпущенного в нажатое)
     if (pressed && !mLastState) {
         mPressCount++;
-        mPendingCallback = true;
+        mPressedFlag = true;  // Устанавливаем флаг нажатия
         mLastState = true;
     } else if (!pressed && mLastState) {
         mLastState = false;
     }
-    
-    // Вызываем callback если есть ожидающий вызов
-    // В ESP32 callback можно вызывать из ISR, но он должен быть помечен IRAM_ATTR
-    if (mPendingCallback && mCallback != nullptr) {
-        mPendingCallback = false;
-        mCallback();
+}
+
+bool ButtonHandler::wasPressed()
+{
+    // Атомарное чтение и сброс флага
+    bool pressed = mPressedFlag;
+    if (pressed) {
+        mPressedFlag = false;
     }
+    return pressed;
 }
 
 bool ButtonHandler::isPressed()

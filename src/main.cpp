@@ -55,21 +55,6 @@ LineFollower robot(sensors, motors, pid, nullptr);
 // Кнопка: пин 4 → резистор 10кОм → GND, при нажатии замыкается на 3.3V (Active HIGH)
 ButtonHandler button(BUTTON_PIN, false); // false = кнопка к VCC (Active HIGH)
 
-// Флаг для безопасной обработки нажатия кнопки вне ISR
-volatile bool buttonPressed = false;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ОБРАБОТКА КНОПКИ СТАРТ/СТОП (ButtonHandler с прерываниями)
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Callback-функция для обработки нажатия кнопки
-// Вызывается из прерывания ButtonHandler - ДОЛЖНА БЫТЬ МАКСИМАЛЬНО БЫСТРОЙ!
-void IRAM_ATTR onButtonPressed()
-{
-    // В ISR ТОЛЬКО устанавливаем флаг - никаких тяжёлых операций!
-    buttonPressed = true;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // ЗАДАЧА РОБОТА (FreeRTOS Task)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -78,10 +63,8 @@ void robotTask(void* parameter) {
     Serial.println("[TASK] Задача робота запущена на Core 1");
     
     while (true) {
-        // Обработка флага кнопки (безопасно, вне ISR)
-        if (buttonPressed) {
-            buttonPressed = false;
-            
+        // Опрос кнопки (читаем и сбрасываем флаг)
+        if (button.wasPressed()) {
             RobotState state = robot.getState();
             if (state == IDLE || state == STOPPED || state == LOST) {
                 robot.start();
@@ -115,7 +98,7 @@ void setup() {
     Serial.println("╚════════════════════════════════════════════╝\n");
     
     // Инициализация кнопки старт/стоп с использованием ButtonHandler
-    button.init(onButtonPressed);
+    button.init();
     Serial.println("[OK] Кнопка старт/стоп инициализирована (ButtonHandler + ISR)");
     
     // Инициализация робота

@@ -6,15 +6,11 @@
 // Таймиги кнопки в миллисекундах
 #define BUTTON_DEBOUNCE_TIME 100      // Антидребезг (оптимально для механических кнопок)
 
-// Тип функции обратного вызова
-typedef void (*ButtonCallback)();
-
 /**
  * @brief Класс для обработки нажатий кнопки с использованием прерываний
  * 
- * Адаптировано из примера release-mechanism для ESP32
- * Использует прерывания для надежного определения нажатий
- * с программным антидребезгом
+ * Использует флаговую модель: прерывание устанавливает флаг,
+ * основной цикл читает и сбрасывает флаг методом wasPressed()
  */
 class ButtonHandler
 {
@@ -27,14 +23,19 @@ public:
     ButtonHandler(int buttonPin, bool activeLow = true);
     
     /**
-     * @brief Инициализация обработчика с функцией обратного вызова
-     * @param callback Функция, которая будет вызвана при нажатии кнопки
+     * @brief Инициализация обработчика (без callback)
      */
-    void init(ButtonCallback callback);
+    void init();
+    
+    /**
+     * @brief Проверить и сбросить флаг нажатия
+     * @return true если кнопка была нажата с последней проверки
+     */
+    bool wasPressed();
     
     /**
      * @brief Получить текущее состояние кнопки
-     * @return true если кнопка нажата
+     * @return true если кнопка нажата в данный момент
      */
     bool isPressed();
     
@@ -65,9 +66,8 @@ private:
     bool mLastState;             // Последнее стабильное состояние
     unsigned long mLastDebounceTime; // Время последнего изменения
     unsigned long mPressCount;   // Счетчик нажатий
-    ButtonCallback mCallback;    // Функция обратного вызова
     volatile bool mButtonState;  // Текущее состояние (используется в ISR)
-    volatile bool mPendingCallback; // Флаг ожидающего вызова callback
+    volatile bool mPressedFlag;  // Флаг нажатия (устанавливается в ISR, читается в loop)
     
     // Статический указатель для доступа из ISR
     static ButtonHandler* instance;
