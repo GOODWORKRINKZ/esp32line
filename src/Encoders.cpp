@@ -80,6 +80,20 @@ void Encoders::resetTicks() {
     totalRightTicks = 0;
 }
 
+void Encoders::resetAll() {
+    // Полный сброс всех данных
+    portENTER_CRITICAL(&timerMux);
+    leftTicks = 0;
+    rightTicks = 0;
+    portEXIT_CRITICAL(&timerMux);
+    
+    totalLeftTicks = 0;
+    totalRightTicks = 0;
+    leftSpeed = 0.0;
+    rightSpeed = 0.0;
+    lastUpdateTime = 0;
+}
+
 void IRAM_ATTR Encoders::leftISR() {
     leftTicks++;
 }

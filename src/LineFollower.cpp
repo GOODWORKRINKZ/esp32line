@@ -92,12 +92,28 @@ void LineFollower::start() {
 #ifdef DEBUG_MODE
     Serial.printf("[%lu] ▶ СТАРТ → СЛЕДОВАНИЕ ПО ЛИНИИ\n", millis());
 #endif
+    // Полный сброс всех состояний
     currentState = FOLLOWING;
+    
+    // Сброс PID
     pid.reset();
+    
+    // Сброс памяти позиции датчиков
     sensors.resetPositionMemory();
+    
+    // Сброс энкодеров (все счётчики и скорости)
+    if (encoders) {
+        encoders->resetAll();
+    }
+    
+    // Сброс состояния поворотов
     turnDirection = TURN_NONE;
     overshoot = false;
     lastValidPosition = 0.0;
+    
+    // Сброс таймеров поиска
+    searchStartTime = 0;
+    waitStartTime = 0;
 }
 
 void LineFollower::pause() {

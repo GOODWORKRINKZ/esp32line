@@ -42,6 +42,9 @@ public:
     
     // Сбросить накопительные счетчики
     void resetTicks();
+    
+    // Полный сброс всех данных (для перезапуска)
+    void resetAll();
 };
 
 #endif // ENCODERS_H
