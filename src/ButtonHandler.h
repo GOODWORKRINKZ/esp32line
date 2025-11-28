@@ -4,13 +4,17 @@
 #include <Arduino.h>
 
 // Таймиги кнопки в миллисекундах
-#define BUTTON_DEBOUNCE_TIME 250      // Антидребезг (увеличен для надёжности)
+#define BUTTON_DEBOUNCE_TIME 100      // Антидребезг (для CHANGE режима нужен больше)
+#define BUTTON_MIN_PRESS_TIME 50      // Минимальное время удержания для валидного нажатия
 
 /**
- * @brief Класс для обработки нажатий кнопки с использованием прерываний
+ * @brief Класс для обработки нажатий кнопки с моделью press-release
  * 
- * Использует флаговую модель: прерывание устанавливает флаг,
- * основной цикл читает и сбрасывает флаг методом wasPressed()
+ * Действие срабатывает только когда пользователь:
+ * 1. Нажал кнопку (зафиксировали)
+ * 2. Отпустил кнопку (только тогда wasPressed() вернёт true)
+ * 
+ * Это защищает от случайных срабатываний и делает управление предсказуемым.
  */
 class ButtonHandler
 {
@@ -63,11 +67,13 @@ private:
     
     int mButtonPin;              // Номер пина кнопки
     bool mActiveLow;             // true если кнопка подключена к GND
-    bool mLastState;             // Последнее стабильное состояние
     unsigned long mLastDebounceTime; // Время последнего изменения
     unsigned long mPressCount;   // Счетчик нажатий
-    volatile bool mButtonState;  // Текущее состояние (используется в ISR)
-    volatile bool mPressedFlag;  // Флаг нажатия (устанавливается в ISR, читается в loop)
+    
+    // Состояния для модели press-release
+    volatile bool mIsHeld;       // Кнопка сейчас удерживается
+    volatile bool mWasReleased;  // Флаг: кнопка была отпущена (готово к обработке)
+    volatile unsigned long mPressStartTime;  // Когда начали нажатие
     
     // Статический указатель для доступа из ISR
     static ButtonHandler* instance;
