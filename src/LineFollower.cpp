@@ -244,7 +244,8 @@ void LineFollower::followLine() {
             // ЛИНИЯ ПОТЕРЯНА НО НЕДАВНО БЫЛА ВИДНА
             // Резкий поворот? ОСТАНАВЛИВАЕМСЯ и ждём обновления энкодеров!
             // ═══════════════════════════════════════════════════════════════
-            if (abs(lastPosition) >= 2.0) {
+            // ИЗМЕНЕНО: требуем ОЧЕНЬ сильное отклонение (2.5+) И потерю линии более 50мс
+            if (abs(lastPosition) >= 2.5 && timeSinceLine >= 50) {
                 // Резкое отклонение - это поворот трассы!
                 motors.stop();
                 
@@ -265,13 +266,13 @@ void LineFollower::followLine() {
             int leftSpeed, rightSpeed;
             
             if (lastPosition > 0) {
-                // Линия была справа - крутим вправо
-                leftSpeed = baseSpeed;
-                rightSpeed = -MIN_SPEED;  // Правый назад
+                // Линия была справа - крутим вправо (АГРЕССИВНЕЕ!)
+                leftSpeed = baseSpeed + 20;  // Ускоряем левое
+                rightSpeed = -MIN_SPEED;     // Правый назад
             } else {
-                // Линия была слева - крутим влево
-                leftSpeed = -MIN_SPEED;   // Левый назад
-                rightSpeed = baseSpeed;
+                // Линия была слева - крутим влево (АГРЕССИВНЕЕ!)
+                leftSpeed = -MIN_SPEED;      // Левый назад
+                rightSpeed = baseSpeed + 20; // Ускоряем правое
             }
             
             motors.setSpeed(leftSpeed, rightSpeed);
@@ -303,7 +304,7 @@ void LineFollower::followLine() {
     float absError = abs(error);
     
     // Пороги для PID режимов (с учётом весов датчиков -3..+3)
-    const float AGGRESSIVE_THRESHOLD = 2.5;  // Только для ОЧЕНЬ резких отклонений
+    const float AGGRESSIVE_THRESHOLD = 2.0;  // Для резких отклонений (снижен для быстрой реакции)
     
     // Определяем режим
     const char* mode;
