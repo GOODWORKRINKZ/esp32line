@@ -15,13 +15,17 @@ void LineFollower::begin() {
     
     if (encoders) {
         encoders->begin();
+#ifdef DEBUG_MODE
         Serial.println("[OK] Энкодеры инициализированы");
         Serial.printf("[INFO] Кинематика: %.2f тиков/градус, %.2f мм/тик\n", 
                       TICKS_PER_DEGREE, MM_PER_TICK);
+#endif
     }
     
     currentState = IDLE;
+#ifdef DEBUG_MODE
     Serial.println("[OK] LineFollower инициализирован");
+#endif
 }
 
 void LineFollower::update() {
@@ -54,7 +58,9 @@ void LineFollower::update() {
                 if (encoders) {
                     encoders->resetTicks();
                 }
+#ifdef DEBUG_MODE
                 Serial.printf("[%lu] ✓ Энкодеры обнулены → ПОИСК\n", millis());
+#endif
                 
                 // FIXED: Линия СЛЕВА (turn=LEFT) → ищем ВЛЕВО (SEARCHING_LEFT)
                 //        Линия СПРАВА (turn=RIGHT) → ищем ВПРАВО (SEARCHING_RIGHT)
@@ -74,14 +80,18 @@ void LineFollower::update() {
             
         case LOST:
             motors.stop();
+#ifdef DEBUG_MODE
             Serial.println("⚠ ЛИНИЯ ПОТЕРЯНА! Нажмите кнопку для повторного поиска");
+#endif
             currentState = IDLE;
             break;
     }
 }
 
 void LineFollower::start() {
+#ifdef DEBUG_MODE
     Serial.printf("[%lu] ▶ СТАРТ → СЛЕДОВАНИЕ ПО ЛИНИИ\n", millis());
+#endif
     currentState = FOLLOWING;
     pid.reset();
     sensors.resetPositionMemory();
@@ -91,30 +101,40 @@ void LineFollower::start() {
 }
 
 void LineFollower::pause() {
+#ifdef DEBUG_MODE
     Serial.println("⏸ ПАУЗА - Остановка");
+#endif
     currentState = STOPPED;
     motors.stop();
 }
 
 void LineFollower::stop() {
+#ifdef DEBUG_MODE
     Serial.printf("[%lu] ⏹ СТОП\n", millis());
+#endif
     currentState = STOPPED;
     motors.stop();
 }
 
 void LineFollower::calibrate() {
+#ifdef DEBUG_MODE
     Serial.println("⚙ Запуск калибровки датчиков");
+#endif
     currentState = CALIBRATING;
 }
 
 void LineFollower::increaseSpeed() {
     baseSpeed = constrain(baseSpeed + 10, MIN_SPEED, MAX_SPEED);
+#ifdef DEBUG_MODE
     Serial.printf("Скорость увеличена: %d\n", baseSpeed);
+#endif
 }
 
 void LineFollower::decreaseSpeed() {
     baseSpeed = constrain(baseSpeed - 10, MIN_SPEED, MAX_SPEED);
+#ifdef DEBUG_MODE
     Serial.printf("Скорость уменьшена: %d\n", baseSpeed);
+#endif
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -169,6 +189,7 @@ void LineFollower::executeTurn() {
         motors.stop();
         currentState = FOLLOWING;
         pid.reset();
+#ifdef DEBUG_MODE
         if (encoders) {
             long leftTicks = abs(encoders->getLeftTicks());
             long rightTicks = abs(encoders->getRightTicks());
@@ -177,6 +198,7 @@ void LineFollower::executeTurn() {
         } else {
             Serial.printf("[%lu] ✓ ЛИНИЯ В ЦЕНТРЕ → ЕДЕМ\n", millis());
         }
+#endif
         return;
     }
     
@@ -202,8 +224,10 @@ void LineFollower::executeTurn() {
         // Если повернули достаточно - ищем линию
         if (avgTicks >= targetTicks) {
             motors.stop();
+#ifdef DEBUG_MODE
             Serial.printf("[%lu] ⚠ Повернули %.1f° (L=%ld R=%ld тиков), линия не найдена → ПОИСК\n", 
                           millis(), targetTurnDegrees, leftTicks, rightTicks);
+#endif
             currentState = (turnDirection == TURN_LEFT) ? SEARCHING_RIGHT : SEARCHING_LEFT;
             searchStartTime = millis();
             return;
@@ -267,8 +291,10 @@ void LineFollower::followLine() {
                 waitStartTime = millis();
                 currentState = WAITING_FOR_TURN;
                 
+#ifdef DEBUG_MODE
                 Serial.printf("[%lu] ⏸ СТОП перед поворотом (поз=%.1f) → ждём 200мс\n",
                               millis(), lastPosition);
+#endif
                 return;
             }
             
@@ -304,7 +330,9 @@ void LineFollower::followLine() {
             return;
         } else {
             // Линия давно потеряна - начинаем полноценный поиск
+#ifdef DEBUG_MODE
             Serial.printf("[%lu] ⚠ ЛИНИЯ ПОТЕРЯНА! → ПОИСК\n", millis());
+#endif
             currentState = SEARCHING_LEFT;
             searchStartTime = millis();
             return;
@@ -417,7 +445,9 @@ void LineFollower::searchLine() {
     
     // Проверяем, нашли ли линию
     if (position != -999) {
+#ifdef DEBUG_MODE
         Serial.printf("[%lu] ✓ ЛИНИЯ НАЙДЕНА (поиск %lu мс) → ЕДЕМ\n", now, searchTime);
+#endif
         currentState = FOLLOWING;
         pid.reset();
         return;
@@ -425,7 +455,9 @@ void LineFollower::searchLine() {
     
     // Проверяем таймаут
     if (searchTime > SEARCH_TIMEOUT) {
+#ifdef DEBUG_MODE
         Serial.printf("[%lu] ✗ ТАЙМАУТ ПОИСКА (%lu мс) → ПОТЕРЯНА\n", now, searchTime);
+#endif
         currentState = LOST;
         return;
     }
@@ -436,7 +468,9 @@ void LineFollower::searchLine() {
         
         // Переключаемся на поиск вправо через половину времени
         if (searchTime > SEARCH_TIMEOUT / 2) {
+#ifdef DEBUG_MODE
             Serial.printf("[%lu] → ПОИСК ВПРАВО (прошло %lu мс)\n", now, searchTime);
+#endif
             currentState = SEARCHING_RIGHT;
         }
     } else {
