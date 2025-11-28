@@ -49,6 +49,10 @@ private:
     float targetTurnDegrees;
     unsigned long waitStartTime;  // Время начала ожидания перед поворотом
     
+    // Флаг overshoot (идея с roboforum.ru + Wright Hobbies)
+    bool overshoot;  // true = потеряли линию в повороте (нужна смягчённая коррекция)
+    float lastValidPosition;  // Последняя валидная позиция для детекции overshoot
+    
 public:
     // Конструктор с опциональным параметром энкодеров
     LineFollower(LineSensors& s, Motors& m, PIDController& p, Encoders* e = nullptr);

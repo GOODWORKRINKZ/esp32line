@@ -6,7 +6,7 @@ LineFollower::LineFollower(LineSensors& s, Motors& m, PIDController& p, Encoders
     : sensors(s), motors(m), pid(p), encoders(e),
       currentState(IDLE), baseSpeed(BASE_SPEED), searchStartTime(0),
       turnDirection(TURN_NONE), turnStartTicksLeft(0), turnStartTicksRight(0),
-      targetTurnDegrees(0) {
+      targetTurnDegrees(0), overshoot(false), lastValidPosition(0.0) {
 }
 
 void LineFollower::begin() {
@@ -86,6 +86,8 @@ void LineFollower::start() {
     pid.reset();
     sensors.resetPositionMemory();
     turnDirection = TURN_NONE;
+    overshoot = false;
+    lastValidPosition = 0.0;
 }
 
 void LineFollower::pause() {
@@ -238,14 +240,21 @@ void LineFollower::followLine() {
         unsigned long timeSinceLine = millis() - sensors.getLastPositionTime();
         float lastPosition = sensors.getLastKnownPosition();
         
+        // ДЕТЕКЦИЯ OVERSHOOT (идея Wright Hobbies + roboforum.ru)
+        // Если потеряли линию в повороте - устанавливаем флаг
+        if (lastValidPosition != 0.0 && timeSinceLine >= OVERSHOOT_DETECT_TIME) {
+            overshoot = true;
+        }
+        
         // Проверяем что есть валидная сохранённая позиция и она не устарела
         if (lastPosition != -999 && timeSinceLine < LINE_MEMORY_TIMEOUT) {
             // ═══════════════════════════════════════════════════════════════
             // ЛИНИЯ ПОТЕРЯНА НО НЕДАВНО БЫЛА ВИДНА
             // Резкий поворот? ОСТАНАВЛИВАЕМСЯ и ждём обновления энкодеров!
             // ═══════════════════════════════════════════════════════════════
-            // ИЗМЕНЕНО: требуем ОЧЕНЬ сильное отклонение (2.5+) И потерю линии более 50мс
-            if (abs(lastPosition) >= 2.5 && timeSinceLine >= 50) {
+            // Требуем сильное отклонение (2.3+) И потерю линии более 80мс
+            // Смягчено после анализа roboforum.ru - не надо слишком рано останавливаться
+            if (abs(lastPosition) >= 2.3 && timeSinceLine >= 80) {
                 // Резкое отклонение - это поворот трассы!
                 motors.stop();
                 
@@ -263,16 +272,23 @@ void LineFollower::followLine() {
                 return;
             }
             
+            // Адаптивная скорость поиска (идея Wright Hobbies)
+            // После 150мс поиска - снижаем скорость на 30% для точности
+            int searchSpeed = baseSpeed;
+            if (timeSinceLine > 150) {
+                searchSpeed = baseSpeed * 0.7;
+            }
+            
             int leftSpeed, rightSpeed;
             
             if (lastPosition > 0) {
-                // Линия была справа - крутим вправо (АГРЕССИВНЕЕ!)
-                leftSpeed = baseSpeed + 20;  // Ускоряем левое
-                rightSpeed = -MIN_SPEED;     // Правый назад
+                // Линия была справа - крутим вправо
+                leftSpeed = searchSpeed;
+                rightSpeed = -MIN_SPEED;
             } else {
-                // Линия была слева - крутим влево (АГРЕССИВНЕЕ!)
-                leftSpeed = -MIN_SPEED;      // Левый назад
-                rightSpeed = baseSpeed + 20; // Ускоряем правое
+                // Линия была слева - крутим влево
+                leftSpeed = -MIN_SPEED;
+                rightSpeed = searchSpeed;
             }
             
             motors.setSpeed(leftSpeed, rightSpeed);
@@ -300,11 +316,15 @@ void LineFollower::followLine() {
     // (как у amjed-ali-k и Aarushraj-Puduchery)
     // ═══════════════════════════════════════════════════════════════════════
     
+    // Сохраняем валидную позицию для детекции overshoot
+    lastValidPosition = position;
+    
     float error = position;
     float absError = abs(error);
     
-    // Пороги для PID режимов (с учётом весов датчиков -3..+3)
-    const float AGGRESSIVE_THRESHOLD = 2.0;  // Для резких отклонений (снижен для быстрой реакции)
+    // Пороги для PID режимов (улучшенная градация по Wright Hobbies)
+    const float AGGRESSIVE_THRESHOLD = 2.0;  // Для резких отклонений
+    const float OVERSHOOT_THRESHOLD = 2.5;   // Критическое отклонение = вероятный overshoot
     
     // Определяем режим
     const char* mode;
@@ -314,10 +334,20 @@ void LineFollower::followLine() {
     float correction;
     if (absError >= AGGRESSIVE_THRESHOLD) {
         // ═══════════════════════════════════════════════════════════════════
-        // АГРЕССИВНЫЙ PID - только для критических отклонений
+        // АГРЕССИВНЫЙ PID - для сильных отклонений
+        // С учётом OVERSHOOT (идея Wright Hobbies)
         // ═══════════════════════════════════════════════════════════════════
-        mode = "АГРЕСС";
-        correction = AGGRESSIVE_KP * error + AGGRESSIVE_KD * (error - pid.getPreviousError());
+        
+        // Если overshoot - смягчаем коррекцию (не делаем слишком резких движений)
+        if (overshoot && absError >= OVERSHOOT_THRESHOLD) {
+            mode = "ВОССТ";
+            // Смягчённая коррекция для восстановления после overshoot
+            correction = (AGGRESSIVE_KP * 0.7) * error + (AGGRESSIVE_KD * 0.8) * (error - pid.getPreviousError());
+            overshoot = false;  // Сбрасываем флаг после применения
+        } else {
+            mode = "АГРЕСС";
+            correction = AGGRESSIVE_KP * error + AGGRESSIVE_KD * (error - pid.getPreviousError());
+        }
         
         // Применяем коррекцию с возможностью отрицательной скорости
         leftSpeed = baseSpeed + correction;
@@ -333,6 +363,7 @@ void LineFollower::followLine() {
         // ═══════════════════════════════════════════════════════════════════
         mode = "ПЛАВНО";
         correction = pid.calculate(error);
+        overshoot = false;  // Сбрасываем флаг при нормальном движении
         
         leftSpeed = baseSpeed + correction;
         rightSpeed = baseSpeed - correction;
