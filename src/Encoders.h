@@ -15,6 +15,10 @@ private:
     float leftSpeed;   // мм/сек
     float rightSpeed;  // мм/сек
     
+    // Накопительные счётчики тиков (не сбрасываются в update())
+    long totalLeftTicks;
+    long totalRightTicks;
+    
     // ISR функции должны быть static
     static void IRAM_ATTR leftISR();
     static void IRAM_ATTR rightISR();
@@ -32,12 +36,15 @@ public:
     float getLeftSpeed() const;
     float getRightSpeed() const;
     
-    // Получить количество тиков
-    long getLeftTicks();
-    long getRightTicks();
+    // Получить НАКОПЛЕННОЕ количество тиков (для контроля поворота)
+    long getLeftTicks() const;
+    long getRightTicks() const;
     
-    // Сбросить счетчики
+    // Сбросить накопительные счетчики
     void resetTicks();
+    
+    // Полный сброс всех данных (для перезапуска)
+    void resetAll();
 };
 
 #endif // ENCODERS_H

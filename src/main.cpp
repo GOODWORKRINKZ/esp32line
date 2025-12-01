@@ -6,6 +6,7 @@
 #include "Encoders.h"
 #include "LineFollower.h"
 #include "ButtonHandler.h"
+#include "Buzzer.h"
 
 // Forward declarations
 void robotTask(void* parameter);
@@ -55,20 +56,8 @@ LineFollower robot(sensors, motors, pid, nullptr);
 // Кнопка: пин 4 → резистор 10кОм → GND, при нажатии замыкается на 3.3V (Active HIGH)
 ButtonHandler button(BUTTON_PIN, false); // false = кнопка к VCC (Active HIGH)
 
-// Флаг для безопасной обработки нажатия кнопки вне ISR
-volatile bool buttonPressed = false;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ОБРАБОТКА КНОПКИ СТАРТ/СТОП (ButtonHandler с прерываниями)
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Callback-функция для обработки нажатия кнопки
-// Вызывается из прерывания ButtonHandler - ДОЛЖНА БЫТЬ МАКСИМАЛЬНО БЫСТРОЙ!
-void IRAM_ATTR onButtonPressed()
-{
-    // В ISR ТОЛЬКО устанавливаем флаг - никаких тяжёлых операций!
-    buttonPressed = true;
-}
+// Бузер для звуковых сигналов
+Buzzer buzzer(BUZZER_PIN, BUZZER_CHANNEL);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ЗАДАЧА РОБОТА (FreeRTOS Task)
@@ -78,16 +67,19 @@ void robotTask(void* parameter) {
     Serial.println("[TASK] Задача робота запущена на Core 1");
     
     while (true) {
-        // Обработка флага кнопки (безопасно, вне ISR)
-        if (buttonPressed) {
-            buttonPressed = false;
-            
+        // Обновление бузера (неблокирующее воспроизведение)
+        buzzer.update();
+        
+        // Опрос кнопки (читаем и сбрасываем флаг)
+        if (button.wasPressed()) {
             RobotState state = robot.getState();
             if (state == IDLE || state == STOPPED || state == LOST) {
                 robot.start();
+                buzzer.play(MELODY_START);
                 Serial.println("[BUTTON] Старт!");
             } else {
                 robot.stop();
+                buzzer.play(MELODY_STOP);
                 Serial.println("[BUTTON] Стоп!");
             }
         }
@@ -115,8 +107,11 @@ void setup() {
     Serial.println("╚════════════════════════════════════════════╝\n");
     
     // Инициализация кнопки старт/стоп с использованием ButtonHandler
-    button.init(onButtonPressed);
+    button.init();
     Serial.println("[OK] Кнопка старт/стоп инициализирована (ButtonHandler + ISR)");
+    
+    // Инициализация бузера
+    buzzer.begin();
     
     // Инициализация робота
     robot.begin();
@@ -142,6 +137,15 @@ void setup() {
     Serial.println("Робот готов к работе!");
     Serial.println("Поместите робота на линию и нажмите кнопку для старта");
     Serial.println("Повторное нажатие кнопки остановит робота\n");
+    
+    // Сигнал готовности
+    buzzer.play(MELODY_READY);
+    
+    // Ждём завершения мелодии готовности
+    while (buzzer.isPlaying()) {
+        buzzer.update();
+        delay(10);
+    }
     
     // Создаём задачу FreeRTOS для робота на ядре 1 (ядро 0 для WiFi/BT)
     xTaskCreatePinnedToCore(

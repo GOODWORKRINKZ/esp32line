@@ -5,7 +5,8 @@ volatile long Encoders::leftTicks = 0;
 volatile long Encoders::rightTicks = 0;
 portMUX_TYPE Encoders::timerMux = portMUX_INITIALIZER_UNLOCKED;
 
-Encoders::Encoders() : lastUpdateTime(0), leftSpeed(0.0), rightSpeed(0.0) {
+Encoders::Encoders() : lastUpdateTime(0), leftSpeed(0.0), rightSpeed(0.0),
+                       totalLeftTicks(0), totalRightTicks(0) {
 }
 
 void Encoders::begin() {
@@ -34,6 +35,10 @@ void Encoders::update() {
         rightTicks = 0;
         portEXIT_CRITICAL(&timerMux);
         
+        // НАКАПЛИВАЕМ тики для контроля поворота
+        totalLeftTicks += leftTicksLocal;
+        totalRightTicks += rightTicksLocal;
+        
         // Вычисляем пройденное расстояние
         float leftDistance = leftTicksLocal * MM_PER_TICK;
         float rightDistance = rightTicksLocal * MM_PER_TICK;
@@ -54,18 +59,14 @@ float Encoders::getRightSpeed() const {
     return rightSpeed;
 }
 
-long Encoders::getLeftTicks() {
-    portENTER_CRITICAL(&timerMux);
-    long ticks = leftTicks;
-    portEXIT_CRITICAL(&timerMux);
-    return ticks;
+long Encoders::getLeftTicks() const {
+    // Возвращаем НАКОПЛЕННЫЕ тики
+    return totalLeftTicks;
 }
 
-long Encoders::getRightTicks() {
-    portENTER_CRITICAL(&timerMux);
-    long ticks = rightTicks;
-    portEXIT_CRITICAL(&timerMux);
-    return ticks;
+long Encoders::getRightTicks() const {
+    // Возвращаем НАКОПЛЕННЫЕ тики
+    return totalRightTicks;
 }
 
 void Encoders::resetTicks() {
@@ -73,6 +74,24 @@ void Encoders::resetTicks() {
     leftTicks = 0;
     rightTicks = 0;
     portEXIT_CRITICAL(&timerMux);
+    
+    // Сбрасываем накопительные счётчики
+    totalLeftTicks = 0;
+    totalRightTicks = 0;
+}
+
+void Encoders::resetAll() {
+    // Полный сброс всех данных
+    portENTER_CRITICAL(&timerMux);
+    leftTicks = 0;
+    rightTicks = 0;
+    portEXIT_CRITICAL(&timerMux);
+    
+    totalLeftTicks = 0;
+    totalRightTicks = 0;
+    leftSpeed = 0.0;
+    rightSpeed = 0.0;
+    lastUpdateTime = 0;
 }
 
 void IRAM_ATTR Encoders::leftISR() {

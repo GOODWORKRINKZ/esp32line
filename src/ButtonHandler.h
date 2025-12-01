@@ -4,17 +4,17 @@
 #include <Arduino.h>
 
 // Таймиги кнопки в миллисекундах
-#define BUTTON_DEBOUNCE_TIME 100      // Антидребезг (оптимально для механических кнопок)
-
-// Тип функции обратного вызова
-typedef void (*ButtonCallback)();
+#define BUTTON_DEBOUNCE_TIME 100      // Антидребезг (для CHANGE режима нужен больше)
+#define BUTTON_MIN_PRESS_TIME 50      // Минимальное время удержания для валидного нажатия
 
 /**
- * @brief Класс для обработки нажатий кнопки с использованием прерываний
+ * @brief Класс для обработки нажатий кнопки с моделью press-release
  * 
- * Адаптировано из примера release-mechanism для ESP32
- * Использует прерывания для надежного определения нажатий
- * с программным антидребезгом
+ * Действие срабатывает только когда пользователь:
+ * 1. Нажал кнопку (зафиксировали)
+ * 2. Отпустил кнопку (только тогда wasPressed() вернёт true)
+ * 
+ * Это защищает от случайных срабатываний и делает управление предсказуемым.
  */
 class ButtonHandler
 {
@@ -27,14 +27,19 @@ public:
     ButtonHandler(int buttonPin, bool activeLow = true);
     
     /**
-     * @brief Инициализация обработчика с функцией обратного вызова
-     * @param callback Функция, которая будет вызвана при нажатии кнопки
+     * @brief Инициализация обработчика (без callback)
      */
-    void init(ButtonCallback callback);
+    void init();
+    
+    /**
+     * @brief Проверить и сбросить флаг нажатия
+     * @return true если кнопка была нажата с последней проверки
+     */
+    bool wasPressed();
     
     /**
      * @brief Получить текущее состояние кнопки
-     * @return true если кнопка нажата
+     * @return true если кнопка нажата в данный момент
      */
     bool isPressed();
     
@@ -62,12 +67,13 @@ private:
     
     int mButtonPin;              // Номер пина кнопки
     bool mActiveLow;             // true если кнопка подключена к GND
-    bool mLastState;             // Последнее стабильное состояние
     unsigned long mLastDebounceTime; // Время последнего изменения
     unsigned long mPressCount;   // Счетчик нажатий
-    ButtonCallback mCallback;    // Функция обратного вызова
-    volatile bool mButtonState;  // Текущее состояние (используется в ISR)
-    volatile bool mPendingCallback; // Флаг ожидающего вызова callback
+    
+    // Состояния для модели press-release
+    volatile bool mIsHeld;       // Кнопка сейчас удерживается
+    volatile bool mWasReleased;  // Флаг: кнопка была отпущена (готово к обработке)
+    volatile unsigned long mPressStartTime;  // Когда начали нажатие
     
     // Статический указатель для доступа из ISR
     static ButtonHandler* instance;

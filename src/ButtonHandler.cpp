@@ -6,37 +6,32 @@ ButtonHandler* ButtonHandler::instance = nullptr;
 ButtonHandler::ButtonHandler(int buttonPin, bool activeLow)
     : mButtonPin(buttonPin),
       mActiveLow(activeLow),
-      mLastState(false),
       mLastDebounceTime(0),
       mPressCount(0),
-      mCallback(nullptr),
-      mButtonState(false),
-      mPendingCallback(false)
+      mIsHeld(false),
+      mWasReleased(false),
+      mPressStartTime(0)
 {
     // Устанавливаем ссылку на текущий экземпляр
     instance = this;
 }
 
-void ButtonHandler::init(ButtonCallback callback)
+void ButtonHandler::init()
 {
-    mCallback = callback;
-    
-    // Настройка пина в зависимости от типа подключения
-    if (mActiveLow) {
-        pinMode(mButtonPin, INPUT_PULLUP); // Кнопка к GND
-    } else {
-        pinMode(mButtonPin, INPUT); // Кнопка к VCC
-    }
+    // Настройка пина - просто INPUT
+    // Внешняя схема определяет уровень (pullup/pulldown)
+    pinMode(mButtonPin, INPUT);
     
     // Начальное состояние
-    mButtonState = digitalRead(mButtonPin);
-    mLastState = mButtonState;
+    mIsHeld = false;
+    mWasReleased = false;
+    mPressStartTime = 0;
     
-    // Подключение прерывания через статический метод
+    // Подключение прерывания на CHANGE (оба фронта - и нажатие и отпускание)
     attachInterrupt(
         digitalPinToInterrupt(mButtonPin),
         handleInterruptStatic,
-        CHANGE  // Реагируем на любое изменение
+        CHANGE  // Срабатываем на любое изменение
     );
 }
 
@@ -52,38 +47,56 @@ void IRAM_ATTR ButtonHandler::handleInterrupt()
 {
     // ISR должна быть максимально быстрой
     unsigned long now = millis();
-    bool currentState = digitalRead(mButtonPin);
     
-    // Инвертируем состояние если кнопка подключена к GND
-    bool pressed = mActiveLow ? !currentState : currentState;
-    
-    // Простой антидребезг - игнорируем изменения быстрее DEBOUNCE_TIME
+    // Антидребезг - увеличен для надёжности при CHANGE
     if (now - mLastDebounceTime < BUTTON_DEBOUNCE_TIME) {
         return;
     }
     
-    mLastDebounceTime = now;
-    mButtonState = currentState;
+    // Читаем текущее состояние пина
+    bool pinState = digitalRead(mButtonPin);
+    bool isPressed = mActiveLow ? !pinState : pinState;
     
-    // Определяем нажатие (переход из отпущенного в нажатое)
-    if (pressed && !mLastState) {
-        mPressCount++;
-        mPendingCallback = true;
-        mLastState = true;
-    } else if (!pressed && mLastState) {
-        mLastState = false;
+    if (isPressed) {
+        // Кнопка НАЖАТА
+        if (!mIsHeld) {
+            // Первое нажатие - запоминаем время
+            mIsHeld = true;
+            mPressStartTime = now;
+            mLastDebounceTime = now;
+        }
+        // Если уже удерживается - игнорируем (дребезг)
     }
-    
-    // Вызываем callback если есть ожидающий вызов
-    // В ESP32 callback можно вызывать из ISR, но он должен быть помечен IRAM_ATTR
-    if (mPendingCallback && mCallback != nullptr) {
-        mPendingCallback = false;
-        mCallback();
+    else {
+        // Кнопка ОТПУЩЕНА
+        if (mIsHeld) {
+            // Было нажатие - проверяем валидность
+            mIsHeld = false;
+            mLastDebounceTime = now;
+            
+            // Проверяем минимальное время удержания
+            if (now - mPressStartTime >= BUTTON_MIN_PRESS_TIME) {
+                mPressCount++;
+                mWasReleased = true;  // Флаг для wasPressed()
+            }
+        }
+        // Если не было нажатия - игнорируем (дребезг или начальное состояние)
     }
+}
+
+bool ButtonHandler::wasPressed()
+{
+    // Атомарное чтение и сброс флага
+    // Возвращает true только после полного цикла: нажал → отпустил
+    bool released = mWasReleased;
+    if (released) {
+        mWasReleased = false;
+    }
+    return released;
 }
 
 bool ButtonHandler::isPressed()
 {
-    bool currentState = digitalRead(mButtonPin);
-    return mActiveLow ? !currentState : currentState;
+    // Возвращает true если кнопка СЕЙЧАС удерживается
+    return mIsHeld;
 }
