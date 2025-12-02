@@ -66,14 +66,14 @@ float LineSensors::calculatePosition(int sensors[5]) {
     // Если ровно 2 соседних центральных датчика активны - едем прямо
     // ═══════════════════════════════════════════════════════════════════════
     if (totalActiveSensors == 2) {
-        // Датчики 2 и 3 (левый и центральный) - линия чуть левее центра
-        if (lineValues[1] && lineValues[2] && !lineValues[0] && !lineValues[3] && !lineValues[4]) {
+        // Индексы [1] и [2] (SENSOR_2 левый + SENSOR_3 центральный)
+        if (lineValues[1] && lineValues[2]) {
             lastKnownPosition = 0.0;  // Считаем что на прямой
             lastPositionTime = millis();
             return 0.0;
         }
-        // Датчики 3 и 4 (центральный и правый) - линия чуть правее центра
-        if (lineValues[2] && lineValues[3] && !lineValues[0] && !lineValues[1] && !lineValues[4]) {
+        // Индексы [2] и [3] (SENSOR_3 центральный + SENSOR_4 правый)
+        if (lineValues[2] && lineValues[3]) {
             lastKnownPosition = 0.0;  // Считаем что на прямой
             lastPositionTime = millis();
             return 0.0;
