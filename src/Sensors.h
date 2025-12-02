@@ -14,6 +14,12 @@ private:
     float lastKnownPosition;
     unsigned long lastPositionTime;  // Время последнего обнаружения линии
     
+    // История позиций для предсказания направления движения линии
+    static const int HISTORY_SIZE = 5;
+    float positionHistory[5];     // Кольцевой буфер позиций
+    int historyIndex;              // Текущий индекс в буфере
+    int historyCount;              // Количество записей в истории
+    
 public:
     LineSensors();
     
@@ -37,6 +43,13 @@ public:
     
     // Сбросить память позиции
     void resetPositionMemory();
+    
+    // Получить направление движения линии (тренд)
+    // Возвращает: <0 линия уходит влево, >0 линия уходит вправо, 0 стабильно
+    float getPositionTrend() const;
+    
+    // Получить среднюю позицию за последние N измерений
+    float getAveragePosition() const;
     
     // Получить минимальные значения
     void getMin(int min[5]) { 

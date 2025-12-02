@@ -1,10 +1,12 @@
 #include "Sensors.h"
 
-LineSensors::LineSensors() : lastKnownPosition(-999), lastPositionTime(0) {
+LineSensors::LineSensors() : lastKnownPosition(-999), lastPositionTime(0),
+                             historyIndex(0), historyCount(0) {
     // Инициализация массивов калибровки
     for(int i = 0; i < 5; i++) {
         sensorMin[i] = 0;
         sensorMax[i] = 1023;
+        positionHistory[i] = 0.0;  // Инициализация истории
     }
 }
 
@@ -89,6 +91,11 @@ float LineSensors::calculatePosition(int sensors[5]) {
     // Нормализованная позиция
     float position = weightedSum / totalActiveSensors;
     
+    // Сохраняем в историю (кольцевой буфер)
+    positionHistory[historyIndex] = position;
+    historyIndex = (historyIndex + 1) % HISTORY_SIZE;
+    if (historyCount < HISTORY_SIZE) historyCount++;
+    
     // Сохраняем последнюю известную позицию
     lastKnownPosition = position;
     lastPositionTime = millis();
@@ -130,4 +137,32 @@ void LineSensors::calibrate() {
 void LineSensors::resetPositionMemory() {
     lastKnownPosition = -999;
     lastPositionTime = 0;
+    historyIndex = 0;
+    historyCount = 0;
+    for (int i = 0; i < HISTORY_SIZE; i++) {
+        positionHistory[i] = 0.0;
+    }
+}
+
+float LineSensors::getPositionTrend() const {
+    // Возвращает направление движения линии (тренд)
+    // >0 = линия уходит вправо, <0 = линия уходит влево
+    if (historyCount < 2) return 0.0;
+    
+    // Вычисляем разницу между новыми и старыми позициями
+    int newest = (historyIndex - 1 + HISTORY_SIZE) % HISTORY_SIZE;
+    int oldest = (historyIndex - historyCount + HISTORY_SIZE) % HISTORY_SIZE;
+    
+    return positionHistory[newest] - positionHistory[oldest];
+}
+
+float LineSensors::getAveragePosition() const {
+    // Возвращает среднюю позицию за последние измерения
+    if (historyCount == 0) return lastKnownPosition;
+    
+    float sum = 0.0;
+    for (int i = 0; i < historyCount; i++) {
+        sum += positionHistory[i];
+    }
+    return sum / historyCount;
 }
